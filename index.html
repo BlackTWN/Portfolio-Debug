@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio · 登入</title>
+<style>
+:root{--bg:#060810;--card:#101828;--border:#1a2238;--gold:#f0c040;--red:#f03060;--muted:#48587a;--text:#b8c8e0;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Helvetica Neue',sans-serif;
+  min-height:100vh;display:flex;align-items:center;justify-content:center;}
+.box{background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:40px 36px;width:320px;text-align:center;
+  box-shadow:0 24px 80px rgba(0,0,0,.6);}
+.logo{font-size:2rem;margin-bottom:8px;}
+.title{font-size:1.1rem;font-weight:700;color:var(--gold);margin-bottom:4px;}
+.sub{font-size:.7rem;color:var(--muted);margin-bottom:28px;}
+input{
+  width:100%;padding:12px;text-align:center;letter-spacing:.4em;font-size:1.4rem;
+  background:#07090f;border:1px solid var(--border);border-radius:8px;
+  color:var(--text);outline:none;margin-bottom:10px;
+  font-family:'Courier New',monospace;transition:border-color .2s;}
+input:focus{border-color:var(--gold);}
+button{
+  width:100%;padding:11px;border-radius:8px;border:none;
+  background:linear-gradient(135deg,var(--gold),#c89020);
+  color:#07090f;font-size:.9rem;font-weight:700;cursor:pointer;
+  transition:opacity .15s;}
+button:hover{opacity:.88;}
+.err{color:var(--red);font-size:.72rem;margin-top:8px;min-height:18px;}
+.hint{color:var(--muted);font-size:.62rem;margin-top:16px;line-height:1.6;}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">📊</div>
+  <div class="title">Portfolio 投資儀表板</div>
+  <div class="sub">請輸入存取密碼</div>
+  <input id="pwd" type="password" maxlength="8" placeholder="••••"
+    onkeydown="if(event.key==='Enter')verify()">
+  <button onclick="verify()">進入</button>
+  <div class="err" id="err"></div>
+  <div class="hint">密碼由持有人自行設定<br>忘記密碼請聯絡儀表板擁有者</div>
+</div>
+<script>
+// ══════════════════════════════════════════
+//  密碼設定說明：
+//  將下方 HASH 改為你的密碼的 SHA-256 雜湊值
+//  計算方式：https://emn178.github.io/online-tools/sha256.html
+//  輸入你的 4–6 位數字密碼 → 複製 hash → 貼到下方
+//
+//  預設密碼：1234（上線前請務必修改！）
+// ══════════════════════════════════════════
+const HASH = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+
+async function sha256(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function verify(){
+  const val = document.getElementById('pwd').value.trim();
+  const err = document.getElementById('err');
+  if(!val){ err.textContent='請輸入密碼'; return; }
+  const h = await sha256(val);
+  if(h === HASH){
+    sessionStorage.setItem('portfolio_auth','1');
+    window.location.href = 'Portfolio/dashboard/portfolio_radar_v3.html';
+  } else {
+    err.textContent = '密碼錯誤，請再試一次';
+    document.getElementById('pwd').value='';
+    document.getElementById('pwd').focus();
+  }
+}
+</script>
+</body>
+</html>
