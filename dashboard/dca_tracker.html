@@ -183,6 +183,38 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
   font-size:.65rem;cursor:pointer;transition:background .15s;margin-left:auto;}
 .lr-apply-btn:hover{background:rgba(240,192,64,.18);}
 
+
+/* 10: 主題變數（Chrome/Edge 風格，與主儀表板同步） */
+[data-theme="light"]{
+  --bg:#f2f3f4;--surface:#ffffff;--card:#ffffff;--card2:#f8f9fa;
+  --border:#dadce0;--border2:#bdc1c6;
+  --gold:#b5830a;--green:#137333;--red:#c5221f;
+  --blue:#1a73e8;--purple:#7627bb;--cyan:#007b83;--orange:#e37400;
+  --text:#202124;--muted:#5f6368;--faint:#e8eaed;
+}
+[data-theme="contrast"]{
+  --bg:#000000;--surface:#121212;--card:#1e1e1e;--card2:#2d2d2d;
+  --border:#444444;--border2:#666666;
+  --gold:#ffd700;--green:#00e676;--red:#ff1744;
+  --blue:#40c4ff;--purple:#ea80fc;--cyan:#18ffff;--orange:#ffab40;
+  --text:#ffffff;--muted:#b0b0b0;--faint:#1a1a1a;
+}
+@media(prefers-color-scheme:light){
+  :root:not([data-theme]):not([data-theme="dark"]){
+    --bg:#f2f3f4;--surface:#ffffff;--card:#ffffff;--card2:#f8f9fa;
+    --border:#dadce0;--border2:#bdc1c6;
+    --gold:#b5830a;--green:#137333;--red:#c5221f;
+    --text:#202124;--muted:#5f6368;--faint:#e8eaed;
+  }
+}
+
+
+/* 14: K 線按鈕 */
+.kbtn{padding:3px 10px;border-radius:8px;border:none;
+  background:transparent;color:var(--muted);font-size:.65rem;cursor:pointer;transition:all .15s;}
+.kbtn:hover{color:var(--text);}
+.kbtn.on{background:var(--card);color:var(--gold);font-weight:600;}
+
 </style>
 </head>
 <body>
@@ -271,7 +303,7 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
     <div class="fg"><label>初始每期金額 NT$ <span class="req">*</span></label>
       <input id="ps-amount" type="number" step="100" placeholder="例：3000"></div>
     <div class="fg"><label>📅 開始日期 <span class="req">*</span></label>
-      <input id="ps-start" type="date"></div>
+      <input id="ps-start" type="date" onchange="checkTradeDate(this)"></div>
   </div>
   <div id="ps-err" class="ferr"></div>
   <div class="factions">
@@ -301,17 +333,90 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
     <div class="sc"><div class="sl">持有天數</div><div class="sv" id="s-days">0 天</div></div>
   </div>
 
-  <!-- 走勢圖 -->
+  <!-- 18: 所有計畫總覽 -->
+<div id="allPlansSummary" style="display:none;margin-bottom:14px;">
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
+    <div class="sc"><div class="sl">所有計畫總投入</div><div class="sv y" id="all-total">NT$0</div></div>
+    <div class="sc"><div class="sl">所有計畫持股總值</div><div class="sv" id="all-value">—</div></div>
+    <div class="sc"><div class="sl">總未實現損益</div><div class="sv" id="all-pnl">—</div></div>
+    <div class="sc"><div class="sl">總整體報酬率</div><div class="sv" id="all-pct">—</div></div>
+    <div class="sc"><div class="sl">計畫數</div><div class="sv y" id="all-plans">0</div></div>
+    <div class="sc"><div class="sl">總持股數</div><div class="sv" id="all-shares">0</div></div>
+  </div>
+  <div style="text-align:right;margin-top:6px;">
+    <button onclick="toggleAllPlans()" id="btn-all-plans"
+      style="font-size:.65rem;padding:3px 10px;border-radius:5px;border:1px solid var(--border2);
+             background:var(--surface);color:var(--muted);cursor:pointer;">
+      📊 顯示所有計畫總覽
+    </button>
+  </div>
+</div>
+<!-- 走勢圖 -->
   <div class="chart-section">
-    <div class="chart-hd">
-      <div class="chart-title">📈 累計投入 vs 持倉市值走勢</div>
+    <div class="chart-hd" style="flex-direction:column;gap:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+        <div class="chart-title">📈 累計投入 vs 持倉市值走勢</div>
+        <!-- 02: 時間篩選下拉 -->
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <span style="font-size:.6rem;color:var(--muted);">區間</span>
+          <select id="chartRange" onchange="onChartRangeChange()"
+            style="background:var(--surface);border:1px solid var(--border);border-radius:5px;
+                   padding:3px 8px;font-size:.68rem;color:var(--text);outline:none;cursor:pointer;">
+            <option value="all">全部</option>
+            <option value="ytd">今年(YTD)</option>
+            <option value="1y">近1年</option>
+            <option value="6m">近6個月</option>
+            <option value="3m">近3個月</option>
+            <option value="mom">本月(MOM)</option>
+            <option value="custom">自訂區間</option>
+          </select>
+          <div id="customRangeWrap" style="display:none;gap:4px;align-items:center;display:none;">
+            <input id="chartFrom" type="date" style="background:var(--surface);border:1px solid var(--border);
+                   border-radius:5px;padding:3px 7px;font-size:.65rem;color:var(--text);outline:none;
+                   color-scheme:dark;width:130px;" onchange="refreshChart()">
+            <span style="font-size:.6rem;color:var(--muted);">至</span>
+            <input id="chartTo" type="date" style="background:var(--surface);border:1px solid var(--border);
+                   border-radius:5px;padding:3px 7px;font-size:.65rem;color:var(--text);outline:none;
+                   color-scheme:dark;width:130px;" onchange="refreshChart()">
+          </div>
+        </div>
+      </div>
+      <!-- 01: 當地股市資訊列 -->
+      <div id="marketInfoRow" style="display:none;padding:6px 10px;background:var(--faint);
+           border-radius:6px;font-size:.68rem;display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+        <span style="color:var(--muted);font-size:.6rem;">📊 市場參考</span>
+        <span id="mktIndexName" style="color:var(--muted);"></span>
+        <span id="mktIndexPrice" style="font-family:'IBM Plex Mono',monospace;font-weight:700;"></span>
+        <span id="mktIndexChange" style="font-family:'IBM Plex Mono',monospace;font-size:.65rem;"></span>
+        <span id="mktIndexDate" style="color:var(--muted);font-size:.6rem;"></span>
+      </div>
       <div class="chart-legend">
         <div class="leg-item"><div class="leg-dot" style="background:var(--gold);"></div>累計投入</div>
         <div class="leg-item"><div class="leg-dot" style="background:var(--green);"></div>持倉市值</div>
         <div class="leg-item"><div class="leg-dot" style="background:rgba(32,208,232,.6);border-top:1px dashed var(--cyan);"></div>加權均成本</div>
       </div>
     </div>
-    <canvas id="dcaChart" style="max-height:200px;width:100%;"></canvas>
+    <canvas id="dcaChart" style="max-height:200px;width:100%;cursor:crosshair;" onclick="onChartClick(event)"></canvas>
+    <!-- 20: 點選顯示當月資訊 -->
+    <div id="chartClickInfo" style="display:none;margin-top:8px;padding:10px 14px;
+         background:var(--card2);border:1px solid var(--border2);border-radius:8px;
+         font-size:.72rem;animation:up .2s ease;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span id="chartClickMonth" style="font-weight:700;color:var(--gold);"></span>
+        <button onclick="document.getElementById('chartClickInfo').style.display='none'"
+          style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.8rem;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+        <div><div style="font-size:.57rem;color:var(--muted);text-transform:uppercase;">投入金額</div>
+          <div id="ci-invested" style="font-family:'IBM Plex Mono',monospace;color:var(--gold);"></div></div>
+        <div><div style="font-size:.57rem;color:var(--muted);text-transform:uppercase;">購買股數</div>
+          <div id="ci-shares" style="font-family:'IBM Plex Mono',monospace;"></div></div>
+        <div><div style="font-size:.57rem;color:var(--muted);text-transform:uppercase;">當月損益</div>
+          <div id="ci-monthly-pnl" style="font-family:'IBM Plex Mono',monospace;"></div></div>
+        <div><div style="font-size:.57rem;color:var(--muted);text-transform:uppercase;">累加損益</div>
+          <div id="ci-total-pnl" style="font-family:'IBM Plex Mono',monospace;"></div></div>
+      </div>
+    </div>
     <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <div style="display:flex;align-items:center;gap:8px;">
         <label style="font-size:.65rem;color:var(--muted);white-space:nowrap;">目前股價：</label>
@@ -319,19 +424,40 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
           style="width:110px;background:var(--surface);border:1px solid var(--border);
                  border-radius:6px;padding:5px 9px;font-size:.76rem;color:var(--text);
                  outline:none;font-family:'IBM Plex Mono',monospace;"
-          oninput="onPriceInput()">
+          oninput="onPriceInput()" onblur="updateMarketInfo()">
       </div>
       <span id="priceHint" style="font-size:.65rem;color:var(--muted);"></span>
     </div>
   </div>
 
   <!-- TABS -->
-  <div class="tabs">
+  
+    <!-- 14: K 線圖區塊 -->
+    <div id="klineSection" style="margin-top:16px;display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+        <div class="chart-title">📊 K 線圖</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span style="font-size:.6rem;color:var(--muted);">週期</span>
+          <div style="display:inline-flex;gap:2px;background:var(--faint);border-radius:10px;padding:2px;">
+            <button class="kbtn on" onclick="switchKline('1d',this)">日K</button>
+            <button class="kbtn" onclick="switchKline('1wk',this)">週K</button>
+            <button class="kbtn" onclick="switchKline('1mo',this)">月K</button>
+          </div>
+        </div>
+      </div>
+      <canvas id="klineChart" style="width:100%;max-height:200px;"></canvas>
+      <div id="klineEmpty" style="text-align:center;padding:24px;color:var(--muted);font-size:.72rem;display:none;">
+        📡 K 線資料載入中，或尚未執行 update_prices.py
+      </div>
+    </div>
+
+    <div class="tabs">
     <div class="tab on"  id="tab-records"  onclick="switchTab('records',this)">📋 每筆明細</div>
     <div class="tab"     id="tab-annual"   onclick="switchTab('annual',this)">📅 年度摘要</div>
     <div class="tab"     id="tab-add"      onclick="switchTab('add',this)">➕ 新增單筆</div>
     <div class="tab"     id="tab-bulk"     onclick="switchTab('bulk',this)">⚡ 批次產生</div>
     <div class="tab"     id="tab-settings" onclick="switchTab('settings',this)">⚙ 計畫設定</div>
+    <div class="tab"     id="tab-overview" onclick="switchTab('overview',this)">📊 所有計畫總覽</div>
   </div>
 
   <!-- TAB: 每筆明細 -->
@@ -359,7 +485,7 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
           <th>#</th><th>📅 購入日期</th><th>買入價</th>
           <th>本期金額</th><th>金額版本</th><th>股數</th>
           <th>📅 出售日期</th><th>出售價</th>
-          <th>已實現損益</th><th>報酬率</th><th>備註</th><th>狀態</th><th></th>
+          <th>已實現損益</th><th>報酬率</th><th>未實現損益</th><th>備註</th><th>狀態</th><th></th>
         </tr></thead>
         <tbody id="logBody"></tbody>
       </table>
@@ -383,7 +509,7 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
       </div>
       <div class="fgrid">
         <div class="fg"><label>📅 購入日期 <span class="req">*</span></label>
-          <input id="f-date" type="date" oninput="onAddDateChange()"></div>
+          <input id="f-date" type="date" oninput="onAddDateChange()" onchange="checkTradeDate(this)"></div>
         <div class="fg"><label>買入價 <span class="req">*</span></label>
           <input id="f-price" type="number" step="0.01" placeholder="例：230.5"></div>
         <div class="fg">
@@ -491,6 +617,11 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
   </div>
 
 </div><!-- /mainContent -->
+
+<!-- TAB: 所有計畫總覽 -->
+<div class="tp" id="tp-overview">
+  <div id="overviewContent"></div>
+</div>
 
 <div class="disc">
   <strong>⚠ 免責聲明：</strong>本工具僅供個人投資追蹤，計算結果依賴手動輸入價格，不構成投資建議。
@@ -720,22 +851,28 @@ function onCycleChange(pfx){
 }
 
 function getDcaDates(plan, from, to){
-  const dates=[], cycle=plan.cycle||'monthly', day=plan.cycleDay||1;
+  const rawDates=[], cycle=plan.cycle||'monthly', day=plan.cycleDay||1;
   const endD=new Date(to||new Date().toISOString().slice(0,10));
   if(cycle==='monthly'||cycle==='bimonthly'||cycle==='quarterly'){
     const months=cycle==='monthly'?1:cycle==='bimonthly'?2:3;
     let cur=new Date(from||plan.start); cur.setDate(day);
     const startD=new Date(from||plan.start);
     if(cur<startD) cur.setMonth(cur.getMonth()+months);
-    while(cur<=endD){ dates.push(cur.toISOString().slice(0,10)); cur=new Date(cur); cur.setMonth(cur.getMonth()+months); }
+    while(cur<=endD){ rawDates.push(cur.toISOString().slice(0,10)); cur=new Date(cur); cur.setMonth(cur.getMonth()+months); }
   } else {
     const weeks=cycle==='weekly'?1:2;
     let cur=new Date(from||plan.start);
     const tdow=day===7?0:day;
     while(cur.getDay()!==tdow) cur.setDate(cur.getDate()+1);
-    while(cur<=endD){ dates.push(cur.toISOString().slice(0,10)); cur=new Date(cur); cur.setDate(cur.getDate()+weeks*7); }
+    while(cur<=endD){ rawDates.push(cur.toISOString().slice(0,10)); cur=new Date(cur); cur.setDate(cur.getDate()+weeks*7); }
   }
-  return dates;
+  // 05: 每個日期自動遞延到最近交易日
+  const mkt = plan.mkt||'tw';
+  return rawDates.map(d=>{
+    const trading = nextTradingDayDca(d, mkt);
+    if(trading!==d) console.log(`📅 ${d} 非交易日 → 遞延至 ${trading}`);
+    return trading;
+  });
 }
 
 function saveCycle(){
@@ -1057,7 +1194,11 @@ function refreshStats(){
   if(curPrice>0){
     valEl.textContent=`${sym}${st.curVal.toLocaleString(undefined,{maximumFractionDigits:0})}`;
     valEl.className='sv '+(st.curVal>=st.holdInv?'g':'r');
-  } else { valEl.textContent='填入股價'; valEl.className='sv'; }
+  } else if(st.totalSh>0 && st.wavg>0){
+    const costVal=st.wavg*st.totalSh;
+    valEl.textContent=`${sym}${costVal.toLocaleString(undefined,{maximumFractionDigits:0})} (成本)`;
+    valEl.className='sv y';
+  } else { valEl.textContent='—'; valEl.className='sv'; }
 
   const pnlEl=g('s-pnl');
   pnlEl.textContent=curPrice>0
@@ -1107,6 +1248,18 @@ function renderTable(){
       :`<span class="pill pill-hold">持有中</span>`;
     const pnlStr=r.realized!=null?`<span class="${r.realized>=0?'g':'r'} mono">${r.realized>=0?'+':''}${r.realized}</span>`:'—';
     const pctStr=r.realPct!=null?`<span class="${r.realPct>=0?'g':'r'} mono">${r.realPct>=0?'+':''}${r.realPct}%</span>`:'—';
+    // 16: 未實現損益計算
+    let unrealStr='—';
+    if(r.status==='holding'&&r.price&&r.shares&&curPrice>0){
+      const pnl=(curPrice-r.price)*r.shares;
+      const pp=(curPrice-r.price)/r.price*100;
+      const sym=getActivePlan()?.mkt==='us'?'$':'NT$';
+      unrealStr=`<span class="${pnl>=0?'g':'r'}" style="font-size:.7rem;">${pnl>=0?'▲':'▼'}${sym}${Math.abs(pnl).toFixed(0)}<br><span style="font-size:.6rem;">${pp>=0?'+':''}${pp.toFixed(2)}%</span></span>`;
+    }else if(r.status==='holding'&&r.price&&r.shares&&curPrice===0){
+      unrealStr='<span style="color:var(--orange);font-size:.65rem;">↑填入股價</span>';
+    }else if(r.status==='sold'&&r.realized!=null){
+      unrealStr=`<span class="${r.realized>=0?'g':'r'}" style="font-size:.65rem;">${r.realized>=0?'+':''}已出售</span>`;
+    }
     tr.innerHTML=`
       <td class="mono" style="color:var(--muted);">${i+1}</td>
       <td class="mono">${r.date.replace(/-/g,'/')}</td>
@@ -1118,6 +1271,7 @@ function renderTable(){
       <td class="mono" style="color:var(--red);">${r.sellPrice?sym+r.sellPrice:'—'}</td>
       <td>${pnlStr}</td>
       <td>${pctStr}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:.7rem;text-align:center;">${unrealStr}</td>
       <td style="color:var(--muted);font-size:.67rem;max-width:70px;overflow:hidden;
            text-overflow:ellipsis;white-space:nowrap;">${r.note||''}</td>
       <td>${statusPill}</td>
@@ -1197,7 +1351,34 @@ function renderAnnual(){
 //  圖表
 // ═══════════════════════════════════════════════
 function refreshChart(){
-  const recs=loadRecs(activePlanId).filter(r=>r.price).sort((a,b)=>a.date.localeCompare(b.date));
+  // 02: 時間區間篩選
+  let allRecs = loadRecs(activePlanId).filter(r=>r.price).sort((a,b)=>a.date.localeCompare(b.date));
+  const range = g('chartRange')?.value||'all';
+  const today = new Date();
+  let fromDate = null, toDate = null;
+
+  if(range==='ytd'){
+    fromDate = new Date(today.getFullYear(),0,1).toISOString().slice(0,10);
+  } else if(range==='1y'){
+    const d=new Date(today); d.setFullYear(d.getFullYear()-1);
+    fromDate = d.toISOString().slice(0,10);
+  } else if(range==='6m'){
+    const d=new Date(today); d.setMonth(d.getMonth()-6);
+    fromDate = d.toISOString().slice(0,10);
+  } else if(range==='3m'){
+    const d=new Date(today); d.setMonth(d.getMonth()-3);
+    fromDate = d.toISOString().slice(0,10);
+  } else if(range==='mom'){
+    fromDate = new Date(today.getFullYear(),today.getMonth(),1).toISOString().slice(0,10);
+  } else if(range==='custom'){
+    fromDate = g('chartFrom')?.value||null;
+    toDate   = g('chartTo')?.value||null;
+  }
+
+  let recs = allRecs;
+  if(fromDate) recs = recs.filter(r=>r.date>=fromDate);
+  if(toDate)   recs = recs.filter(r=>r.date<=toDate);
+  if(!recs.length && range!=='all') recs = allRecs; // fallback 全部
   const canvas=g('dcaChart');
   const ctx=canvas.getContext('2d');
   const dpr=window.devicePixelRatio||1;
@@ -1317,6 +1498,673 @@ window.addEventListener('DOMContentLoaded',()=>{
   if(plans.length>0) switchPlan(plans[0].id);
 });
 window.addEventListener('resize',()=>{ if(activePlanId) refreshChart(); });
+
+
+// 02: 主題跨頁同步
+(function initDcaTheme(){
+  // 19: 載入時套用已記憶的主題
+  const saved = localStorage.getItem('portfolio_theme')||'dark';
+  document.documentElement.dataset.theme = saved==='dark' ? '' : saved;
+  window.addEventListener('storage', function(e){
+    if(e.key==='portfolio_theme_sync'){
+      const theme = localStorage.getItem('portfolio_theme')||'dark';
+      document.documentElement.dataset.theme = theme==='dark' ? '' : theme;
+    }
+  });
+})();
+
+// 02: dca_tracker 補充 light/contrast 主題 CSS vars（透過 dataset.theme）
+
+
+// 10: 購入日期自動遞延到交易日（dca_tracker 版本）
+const TW_HOLIDAYS_DCA = new Set([
+  '2024-01-01','2024-02-08','2024-02-09','2024-02-10','2024-02-11','2024-02-12','2024-02-13','2024-02-14',
+  '2024-02-28','2024-04-04','2024-04-05','2024-05-01','2024-06-10','2024-09-17','2024-10-10',
+  '2025-01-01','2025-01-27','2025-01-28','2025-01-29','2025-01-30','2025-01-31','2025-02-03',
+  '2025-02-28','2025-04-03','2025-04-04','2025-05-01','2025-05-30','2025-06-02',
+  '2025-10-06','2025-10-09','2025-10-10',
+  '2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-23',
+  '2026-04-03','2026-04-06','2026-05-01','2026-06-19','2026-10-09',
+]);
+const US_HOLIDAYS_DCA = new Set([
+  '2024-01-01','2024-01-15','2024-02-19','2024-03-29','2024-05-27',
+  '2024-06-19','2024-07-04','2024-09-02','2024-11-28','2024-12-25',
+  '2025-01-01','2025-01-20','2025-02-17','2025-04-18','2025-05-26',
+  '2025-06-19','2025-07-04','2025-09-01','2025-11-27','2025-12-25',
+  '2026-01-01','2026-01-19','2026-02-16','2026-04-03','2026-05-25',
+  '2026-06-19','2026-07-03','2026-09-07','2026-11-26','2026-12-25',
+]);
+
+function isTradingDayDca(dateStr, mkt){
+  const d=new Date(dateStr), dow=d.getUTCDay();
+  if(dow===0||dow===6) return false;
+  return !(mkt==='us' ? US_HOLIDAYS_DCA : TW_HOLIDAYS_DCA).has(dateStr);
+}
+
+function nextTradingDayDca(dateStr, mkt){
+  let d=new Date(dateStr), itr=0;
+  while(!isTradingDayDca(d.toISOString().slice(0,10),mkt)){
+    d.setUTCDate(d.getUTCDate()+1);
+    if(++itr>14) break;
+  }
+  return d.toISOString().slice(0,10);
+}
+
+function checkTradeDate(inputEl, mkt){
+  const orig=inputEl.value; if(!orig) return;
+  const plan=getActivePlan();
+  const mktUse = mkt||(plan?.mkt)||'tw';
+  const trading=nextTradingDayDca(orig,mktUse);
+  if(trading!==orig){
+    inputEl.value=trading;
+    inputEl.style.borderColor='var(--gold)';
+    showToast(`📅 ${orig} 非交易日，自動調整為 ${trading}`);
+    setTimeout(()=>inputEl.style.borderColor='',2500);
+  }
+}
+
+
+// ════════════════════════════════════════════════════════
+// 02: 時間篩選下拉切換處理
+// ════════════════════════════════════════════════════════
+function onChartRangeChange(){
+  const range = g('chartRange')?.value||'all';
+  const customWrap = g('customRangeWrap');
+  if(customWrap){
+    customWrap.style.display = range==='custom' ? 'flex' : 'none';
+  }
+  refreshChart();
+}
+
+// ════════════════════════════════════════════════════════
+// 01: 股市資訊列 - 依計畫股票類型顯示對應指數
+// 台股(tw) → 台灣加權指數 ^TWII
+// 美股(us) → 道瓊工業 ^DJI 或 NASDAQ ^IXIC
+// ════════════════════════════════════════════════════════
+
+// 股市資訊來源：從 portfolio_radar_v3.html 同步
+// 或由 update_prices.py 寫入 localStorage
+const MKT_INFO_KEY = 'portfolio_market_info';
+
+function getMarketInfo(){
+  try{
+    return JSON.parse(localStorage.getItem(MKT_INFO_KEY)||'{}');
+  }catch(e){ return {}; }
+}
+
+function updateMarketInfo(){
+  const plan = getActivePlan();
+  if(!plan) return;
+
+  const mktRow = g('marketInfoRow');
+  const mktName = g('mktIndexName');
+  const mktPrice = g('mktIndexPrice');
+  const mktChange = g('mktIndexChange');
+  const mktDate = g('mktIndexDate');
+
+  if(!mktRow) return;
+
+  // 讀取 portfolio_radar_v3 寫入的市場資訊（透過 localStorage 共享）
+  const info = getMarketInfo();
+  const isTW = plan.mkt === 'tw';
+
+  // 取對應市場資料
+  const data = isTW ? info.taiex : info.dji;
+
+  if(data && data.price){
+    mktRow.style.display = 'flex';
+    if(mktName)  mktName.textContent  = isTW ? '台灣加權指數' : '道瓊工業';
+    if(mktPrice){
+      mktPrice.textContent = data.price;
+      mktPrice.style.color = data.up ? 'var(--green)' : 'var(--red)';
+    }
+    if(mktChange){
+      mktChange.textContent = data.change||'';
+      mktChange.style.color = data.up ? 'var(--green)' : 'var(--red)';
+    }
+    if(mktDate)  mktDate.textContent  = data.date ? `(${data.date})` : '';
+  } else {
+    // 若無快取資料，顯示預設靜態值
+    mktRow.style.display = 'flex';
+    if(isTW){
+      if(mktName)   mktName.textContent  = '台灣加權指數';
+      if(mktPrice){ mktPrice.textContent = '33,543.88'; mktPrice.style.color='var(--red)'; }
+      if(mktChange){ mktChange.textContent='▼145.80'; mktChange.style.color='var(--red)'; }
+      if(mktDate)   mktDate.textContent  = '(3/20)';
+    } else {
+      if(mktName)   mktName.textContent  = '道瓊工業';
+      if(mktPrice){ mktPrice.textContent = '45,577.47'; mktPrice.style.color='var(--red)'; }
+      if(mktChange){ mktChange.textContent='▼443.96'; mktChange.style.color='var(--red)'; }
+      if(mktDate)   mktDate.textContent  = '(3/21)';
+    }
+  }
+}
+
+// 計畫切換時更新股市資訊
+const _origSwitchPlan = window.switchPlan;
+window.switchPlan = function(id){
+  if(typeof _origSwitchPlan === 'function') _origSwitchPlan(id);
+  setTimeout(updateMarketInfo, 200);
+};
+
+// ════════════════════════════════════════════════════════
+// update_prices.py 每日執行後，同步市場資訊到 localStorage
+// 讓 dca_tracker 可以讀取最新指數
+// ════════════════════════════════════════════════════════
+(function syncMarketInfo(){
+  // 讀取主儀表板已寫入的指數資料（透過 HTML 中的靜態值反推）
+  // 實際上在 portfolio 開過後，portfolio_radar_v3.html 的 JS 會寫入 MKT_INFO_KEY
+  // dca_tracker 開啟時直接讀取
+  const existing = getMarketInfo();
+  if(!existing || !existing.taiex){
+    // 寫入預設靜態值（直到 Actions 更新）
+    localStorage.setItem(MKT_INFO_KEY, JSON.stringify({
+      taiex:{ price:'33,543.88', change:'▼145.80', date:'3/20', up:false, vol:'成交:9,677億' },
+      dji:  { price:'45,577.47', change:'▼443.96', date:'3/21', up:false }
+    }));
+  }
+})();
+
+// ════════════════════════════════════════════════════════
+// 圖表加入參考線（股市基準）
+// 在走勢圖旁加入簡易文字指數資訊（不影響 Canvas）
+// ════════════════════════════════════════════════════════
+
+
+// ════════════════════════════════════════════════════════
+// 18: 所有計畫總覽計算
+// ════════════════════════════════════════════════════════
+let _showAllPlans = false;
+
+function toggleAllPlans(){
+  _showAllPlans = !_showAllPlans;
+  const panel = g('allPlansSummary');
+  const btn   = g('btn-all-plans');
+  if(panel) panel.style.display = _showAllPlans ? 'block' : 'none';
+  if(btn)   btn.textContent = _showAllPlans ? '📊 隱藏總覽' : '📊 顯示所有計畫總覽';
+  if(_showAllPlans) calcAllPlans();
+}
+
+function calcAllPlans(){
+  const plans = loadPlans();
+  let totalInv=0, totalSh=0, totalCost=0;
+
+  plans.forEach(p=>{
+    const recs    = loadRecs(p.id);
+    const filled  = recs.filter(r=>r.price);
+    const holding = filled.filter(r=>r.status==='holding');
+    totalInv += recs.reduce((s,r)=>s+r.amount, 0);
+    totalSh  += holding.reduce((s,r)=>s+(r.shares||0), 0);
+    totalCost+= holding.reduce((s,r)=>s+r.amount, 0);
+  });
+
+  const curP = parseFloat(g('curPrice')?.value||0);
+  const sym  = '各幣別';
+
+  g('all-total') && (g('all-total').textContent = 'NT$'+totalInv.toLocaleString());
+  g('all-plans') && (g('all-plans').textContent = plans.length+' 個');
+  g('all-shares')&& (g('all-shares').textContent = totalSh.toFixed(4)+' 股');
+
+  if(curP>0 && totalSh>0){
+    const val = curP * totalSh;
+    const pnl = val - totalCost;
+    const pct = totalCost>0 ? (pnl/totalCost*100) : 0;
+    g('all-value') && (g('all-value').textContent = 'NT$'+val.toFixed(0));
+    g('all-pnl')   && (g('all-pnl').textContent   = (pnl>=0?'▲':'▼')+'NT$'+Math.abs(pnl).toFixed(0));
+    g('all-pct')   && (g('all-pct').textContent   = (pct>=0?'+':'')+pct.toFixed(2)+'%');
+    if(g('all-pnl')) g('all-pnl').className = 'sv '+(pnl>=0?'g':'r');
+    if(g('all-pct')) g('all-pct').className = 'sv '+(pct>=0?'g':'r');
+  } else {
+    g('all-value')&&(g('all-value').textContent='填入現價計算');
+    g('all-pnl')  &&(g('all-pnl').textContent='—');
+    g('all-pct')  &&(g('all-pct').textContent='—');
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// 20: 走勢圖點選 → 顯示當月資訊
+// ════════════════════════════════════════════════════════
+
+// 月份 tooltip 彈出
+let _chartTooltip = null;
+
+function initChartClickHandler(){
+  const canvas = g('dcaChart');
+  if(!canvas) return;
+  canvas.style.cursor = 'crosshair';
+
+  canvas.addEventListener('click', function(e){
+    const recs = loadRecs(activePlanId)
+      .filter(r=>r.price)
+      .sort((a,b)=>a.date.localeCompare(b.date));
+    if(recs.length < 2) return;
+
+    // 計算點擊對應的時間點
+    const rect = canvas.getBoundingClientRect();
+    const x    = e.clientX - rect.left;
+    const w    = canvas.offsetWidth;
+    const pad_l = 62;
+    const cw   = w - pad_l - 16;
+    const ratio = Math.max(0, Math.min(1, (x - pad_l) / cw));
+    const idx   = Math.round(ratio * (recs.length - 1));
+    const rec   = recs[Math.min(idx, recs.length-1)];
+    if(!rec) return;
+
+    // 取得當月所有紀錄
+    const ym     = rec.date.slice(0,7); // YYYY-MM
+    const monthRecs = loadRecs(activePlanId)
+      .filter(r=>r.date.startsWith(ym));
+
+    // 計算當月統計
+    const monthInv    = monthRecs.reduce((s,r)=>s+r.amount, 0);
+    const monthShares = monthRecs.filter(r=>r.shares).reduce((s,r)=>s+(r.shares||0), 0);
+    const filledRecs  = monthRecs.filter(r=>r.price);
+
+    // 累計到該月的損益
+    const plan = getActivePlan();
+    const sym  = plan?.mkt==='us'?'$':'NT$';
+    let cumInv=0, cumSh=0;
+    recs.filter(r=>r.date<=rec.date).forEach(r=>{ cumInv+=r.amount; cumSh+=(r.shares||0); });
+    const cumCost = recs.filter(r=>r.date<=rec.date&&r.status==='holding').reduce((s,r)=>s+r.amount,0);
+    const curP    = curPrice;
+    const cumVal  = curP>0 ? cumSh*curP : null;
+    const cumPnl  = cumVal!=null ? cumVal-cumCost : null;
+
+    // 顯示 tooltip
+    showChartTooltip(e.clientX, e.clientY, {
+      month: ym.replace('-','/'),
+      inv: monthInv,
+      shares: monthShares,
+      count: monthRecs.length,
+      filledCount: filledRecs.length,
+      cumInv, cumSh,
+      cumPnl, sym,
+      price: rec.price
+    });
+  });
+
+  // 點擊其他地方關閉 tooltip
+  document.addEventListener('click', function(e){
+    if(_chartTooltip && !_chartTooltip.contains(e.target) && e.target!==canvas){
+      _chartTooltip.remove();
+      _chartTooltip = null;
+    }
+  });
+}
+
+function showChartTooltip(cx, cy, info){
+  if(_chartTooltip) _chartTooltip.remove();
+
+  const tip = document.createElement('div');
+  _chartTooltip = tip;
+  tip.style.cssText = `position:fixed;z-index:999;
+    background:var(--card2);border:1px solid var(--border2);
+    border-radius:10px;padding:12px 16px;min-width:200px;
+    box-shadow:0 8px 32px rgba(0,0,0,.5);font-size:.72rem;
+    left:${Math.min(cx+12, window.innerWidth-220)}px;
+    top:${Math.min(cy-10, window.innerHeight-180)}px;`;
+
+  const pnlColor = (info.cumPnl||0)>=0?'var(--green)':'var(--red)';
+  tip.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <strong style="color:var(--gold);font-size:.8rem;">${info.month}</strong>
+      <button onclick="this.parentNode.parentNode.remove()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:.9rem;">✕</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+      <div><div style="color:var(--muted);font-size:.58rem;">本月投入</div>
+        <div style="font-family:'IBM Plex Mono',monospace;color:var(--gold);">${info.sym}${info.inv.toLocaleString()}</div></div>
+      <div><div style="color:var(--muted);font-size:.58rem;">購買股數</div>
+        <div style="font-family:'IBM Plex Mono',monospace;">${info.shares.toFixed(4)}</div></div>
+      <div><div style="color:var(--muted);font-size:.58rem;">本月筆數</div>
+        <div style="font-family:'IBM Plex Mono',monospace;">${info.filledCount}/${info.count}</div></div>
+      <div><div style="color:var(--muted);font-size:.58rem;">買入價</div>
+        <div style="font-family:'IBM Plex Mono',monospace;">${info.price?info.sym+info.price:'—'}</div></div>
+      <div><div style="color:var(--muted);font-size:.58rem;">累計投入</div>
+        <div style="font-family:'IBM Plex Mono',monospace;">${info.sym}${info.cumInv.toLocaleString()}</div></div>
+      <div><div style="color:var(--muted);font-size:.58rem;">累計損益</div>
+        <div style="font-family:'IBM Plex Mono',monospace;color:${pnlColor};">
+          ${info.cumPnl!=null?(info.cumPnl>=0?'▲':'▼')+info.sym+Math.abs(info.cumPnl).toFixed(0):'需填現價'}</div></div>
+    </div>`;
+
+  document.body.appendChild(tip);
+}
+
+// DOMContentLoaded 加入 chart click
+const _origDCL = document.addEventListener.bind(document);
+window.addEventListener('DOMContentLoaded', function(){
+  setTimeout(initChartClickHandler, 500);
+});
+
+
+// ════════════════════════════════════════════════════════
+// 18: 所有計畫總覽
+// ════════════════════════════════════════════════════════
+function renderOverview(){
+  const plans  = loadPlans();
+  const el     = document.getElementById('overviewContent');
+  if(!el) return;
+  if(!plans.length){
+    el.innerHTML='<div style="text-align:center;padding:40px;color:var(--muted);">尚無計畫</div>';
+    return;
+  }
+
+  let totalInvAll=0, totalPnlAll=0, totalSHAll=0;
+  const CYCLE_L={monthly:'每月',bimonthly:'每兩月',quarterly:'每季',weekly:'每週',biweekly:'每兩週'};
+
+  const cards = plans.map(p=>{
+    const recs    = loadRecs(p.id);
+    const filled  = recs.filter(r=>r.price);
+    const holding = filled.filter(r=>r.status==='holding');
+    const sold    = filled.filter(r=>r.status==='sold');
+    const sym     = p.mkt==='us'?'$':'NT$';
+
+    const totalInv  = recs.reduce((s,r)=>s+r.amount, 0);
+    const holdInv   = holding.reduce((s,r)=>s+r.amount, 0);
+    const totalSH   = holding.reduce((s,r)=>s+(r.shares||0), 0);
+    const wavg      = totalSH>0 ? holding.reduce((s,r)=>s+r.price*(r.shares||0),0)/totalSH : 0;
+    const realPnl   = sold.reduce((s,r)=>s+(r.realized||0), 0);
+    const unrealPnl = curPrice>0 ? totalSH*curPrice - holdInv : 0;
+
+    totalInvAll += totalInv;
+    totalPnlAll += realPnl + unrealPnl;
+    totalSHAll  += totalSH;
+
+    // 年化報酬率
+    const first = recs.length>0 ? new Date(recs[0].date) : new Date();
+    const days  = Math.floor((Date.now()-first.getTime())/86400000);
+    const annRet= (days>30&&holdInv>0&&curPrice>0)
+      ? ((Math.pow(1+unrealPnl/holdInv, 365/days)-1)*100) : null;
+
+    const hist = (p.amountHistory||[]).sort((a,b)=>a.effectiveDate.localeCompare(b.effectiveDate));
+    const curAmt = hist.length ? hist[hist.length-1].amount : p.initialAmount||0;
+
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:.88rem;font-weight:700;color:var(--gold);">${p.ticker}</span>
+          <span style="font-size:.68rem;color:var(--muted);margin-left:6px;">${p.name}</span>
+          <span style="font-size:.58rem;padding:1px 7px;border-radius:5px;background:rgba(32,208,232,.08);color:var(--cyan);border:1px solid rgba(32,208,232,.2);margin-left:6px;">${CYCLE_L[p.cycle||'monthly']}</span>
+        </div>
+        <span style="font-size:.62rem;color:var(--muted);">開始 ${p.start}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:.7rem;">
+        <div><div style="color:var(--muted);font-size:.55rem;text-transform:uppercase;">累計投入</div>
+          <div style="font-family:'IBM Plex Mono',monospace;color:var(--gold);">${sym}${totalInv.toLocaleString()}</div></div>
+        <div><div style="color:var(--muted);font-size:.55rem;text-transform:uppercase;">每期金額</div>
+          <div style="font-family:'IBM Plex Mono',monospace;">NT$${curAmt.toLocaleString()}</div></div>
+        <div><div style="color:var(--muted);font-size:.55rem;text-transform:uppercase;">總持股數</div>
+          <div style="font-family:'IBM Plex Mono',monospace;">${totalSH.toFixed(4)}</div></div>
+        <div><div style="color:var(--muted);font-size:.55rem;text-transform:uppercase;">加權均成本</div>
+          <div style="font-family:'IBM Plex Mono',monospace;color:var(--gold);">${wavg>0?sym+wavg.toFixed(2):'—'}</div></div>
+        <div><div style="color:var(--muted);font-size:.55rem;text-transform:uppercase;">已實現損益</div>
+          <div style="font-family:'IBM Plex Mono',monospace;" class="${realPnl>=0?'g':'r'}">${realPnl>=0?'+':''}${sym}${realPnl.toFixed(0)}</div></div>
+        <div><div style="color:var(--muted);font-size:.55rem;text-transform:uppercase;">年化報酬</div>
+          <div style="font-family:'IBM Plex Mono',monospace;" class="${(annRet||0)>=0?'g':'r'}">${annRet!=null?(annRet>=0?'+':'')+annRet.toFixed(1)+'%':'—'}</div></div>
+      </div>
+      <div style="height:4px;background:var(--faint);border-radius:2px;margin-top:10px;overflow:hidden;">
+        <div style="height:100%;width:${Math.min(100,Math.max(2,(holdInv>0?Math.min(200,(unrealPnl/holdInv+1)*50):50)))}%;
+          background:${unrealPnl>=0?'linear-gradient(90deg,var(--green),var(--gold))':'var(--red)'};border-radius:2px;"></div>
+      </div>
+    </div>`;
+  });
+
+  // 全部計畫匯總
+  const summary = `<div style="background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+    <div style="font-size:.65rem;color:var(--muted);text-transform:uppercase;margin-bottom:10px;">📊 所有計畫匯總</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;font-size:.75rem;">
+      <div><div style="color:var(--muted);font-size:.57rem;">計畫數</div>
+        <div style="font-weight:700;font-family:'IBM Plex Mono',monospace;">${plans.length} 個</div></div>
+      <div><div style="color:var(--muted);font-size:.57rem;">總投入</div>
+        <div style="font-weight:700;font-family:'IBM Plex Mono',monospace;color:var(--gold);">NT$${totalInvAll.toLocaleString()}</div></div>
+      <div><div style="color:var(--muted);font-size:.57rem;">總損益</div>
+        <div style="font-weight:700;font-family:'IBM Plex Mono',monospace;" class="${totalPnlAll>=0?'g':'r'}">${totalPnlAll>=0?'+':''}NT$${totalPnlAll.toFixed(0)}</div></div>
+    </div>
+  </div>`;
+
+  el.innerHTML = summary + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;">' + cards.join('') + '</div>';
+}
+
+// ════════════════════════════════════════════════════════
+// 20: 走勢圖點選 - 顯示當月資訊
+// ════════════════════════════════════════════════════════
+let _chartDataPts = []; // 儲存圖表資料點，供點選查詢
+
+function onChartClick(event){
+  const canvas = document.getElementById('dcaChart');
+  if(!canvas || !_chartDataPts.length) return;
+
+  const rect  = canvas.getBoundingClientRect();
+  const clickX = event.clientX - rect.left;
+  const dpr   = window.devicePixelRatio||1;
+  const w     = canvas.offsetWidth;
+
+  // 計算點擊的資料點 index
+  const pad_l = 62, pad_r = 16;
+  const cw    = w - pad_l - pad_r;
+  const relX  = clickX - pad_l;
+  const idx   = Math.round(relX / cw * (_chartDataPts.length-1));
+  const pt    = _chartDataPts[Math.max(0, Math.min(idx, _chartDataPts.length-1))];
+  if(!pt) return;
+
+  // 找該月的所有記錄
+  const month  = pt.date.slice(0,7); // YYYY-MM
+  const recs   = loadRecs(activePlanId).filter(r=>r.date.startsWith(month));
+  const filled = recs.filter(r=>r.price);
+  const plan   = getActivePlan();
+  const sym    = plan?.mkt==='us'?'$':'NT$';
+
+  const monthInv   = recs.reduce((s,r)=>s+r.amount,0);
+  const monthSH    = filled.reduce((s,r)=>s+(r.shares||0),0);
+  const monthAvg   = monthSH>0 ? filled.reduce((s,r)=>s+r.price*(r.shares||0),0)/monthSH : 0;
+  const monthPnl   = curPrice>0&&monthSH>0 ? (curPrice-monthAvg)*monthSH : null;
+  const cumPnl     = curPrice>0 ? pt.val - pt.inv : null;
+
+  // 顯示
+  const info = document.getElementById('chartClickInfo');
+  if(!info) return;
+  document.getElementById('chartClickMonth').textContent = month.replace('-','/') + ' 月份資訊';
+  document.getElementById('ci-invested').textContent     = `${sym}${monthInv.toLocaleString()}（${recs.length}筆）`;
+  document.getElementById('ci-shares').textContent       = monthSH>0 ? `${monthSH.toFixed(4)} 股` : '—';
+
+  const ciPnl = document.getElementById('ci-monthly-pnl');
+  ciPnl.textContent = monthPnl!=null ? `${monthPnl>=0?'▲':'▼'}${sym}${Math.abs(monthPnl).toFixed(0)}` : '需填入股價';
+  ciPnl.className   = monthPnl!=null ? (monthPnl>=0?'g':'r') : '';
+
+  const ciTotal = document.getElementById('ci-total-pnl');
+  ciTotal.textContent = cumPnl!=null ? `${cumPnl>=0?'▲':'▼'}${sym}${Math.abs(cumPnl).toFixed(0)}（${(cumPnl/pt.inv*100).toFixed(2)}%）` : '需填入股價';
+  ciTotal.className   = cumPnl!=null ? (cumPnl>=0?'g':'r') : '';
+
+  info.style.display='block';
+}
+
+// 修改 refreshChart 儲存資料點給 onChartClick 使用
+const _origRefreshChart = window.refreshChart;
+window.refreshChart = function(){
+  if(typeof _origRefreshChart==='function') _origRefreshChart();
+  // 重新計算並儲存資料點
+  const recs = loadRecs(activePlanId).filter(r=>r.price).sort((a,b)=>a.date.localeCompare(b.date));
+  let cumInv=0, cumSH=0;
+  _chartDataPts = recs.map(r=>{
+    cumInv += r.amount;
+    cumSH  += (r.shares||0);
+    return { date:r.date, inv:cumInv, val:curPrice>0?cumSH*curPrice:cumInv, shares:cumSH };
+  });
+};
+
+// switchTab 時渲染總覽
+const _origSwitchTab = window.switchTab;
+window.switchTab = function(key, btn){
+  if(typeof _origSwitchTab==='function') _origSwitchTab(key, btn);
+  if(key==='overview') renderOverview();
+};
+
+
+// ════════════════════════════════════════════════════════
+// 14: K 線圖 - 從 kline_data.json 讀取並用 Canvas 繪製
+// ════════════════════════════════════════════════════════
+
+let _klineData   = {};   // 從 JSON 載入的 K 線資料
+let _klineInterval = '1d'; // 目前週期
+
+async function loadKlineData(ticker){
+  if(!ticker) return null;
+  if(_klineData[ticker]) return _klineData[ticker];
+  try{
+    // 嘗試從相對路徑載入 JSON
+    const paths = [
+      '../data/kline_data.json',
+      './data/kline_data.json',
+      'data/kline_data.json',
+    ];
+    for(const p of paths){
+      try{
+        const r = await fetch(p);
+        if(r.ok){
+          const all = await r.json();
+          Object.assign(_klineData, all);
+          return _klineData[ticker]||null;
+        }
+      }catch(e){}
+    }
+  }catch(e){}
+  return null;
+}
+
+function switchKline(interval, btn){
+  _klineInterval = interval;
+  document.querySelectorAll('.kbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  const plan   = getActivePlan();
+  const ticker = plan?.ticker;
+  if(ticker) drawKlineChart(ticker, interval);
+}
+
+function drawKlineChart(ticker, interval){
+  const canvas = document.getElementById('klineChart');
+  const empty  = document.getElementById('klineEmpty');
+  if(!canvas) return;
+
+  const data = _klineData[ticker]?.[interval||'1d'];
+  if(!data||!data.length){
+    canvas.style.display='none';
+    if(empty){ empty.style.display='block'; }
+    return;
+  }
+  if(empty) empty.style.display='none';
+  canvas.style.display='block';
+
+  const ctx   = canvas.getContext('2d');
+  const dpr   = window.devicePixelRatio||1;
+  const w     = canvas.offsetWidth, h = 180;
+  canvas.width = w*dpr; canvas.height = h*dpr;
+  ctx.scale(dpr,dpr);
+
+  const pad = {t:16,r:12,b:28,l:56};
+  const cw  = w-pad.l-pad.r, ch = h-pad.t-pad.b;
+
+  const maxH = Math.max(...data.map(d=>d.h));
+  const minL = Math.min(...data.map(d=>d.l));
+  const range = maxH - minL || 1;
+
+  const barW  = Math.max(2, Math.floor(cw/data.length) - 1);
+  const xPos  = i => pad.l + (i+0.5)*(cw/data.length);
+  const yPos  = v => pad.t + (1-(v-minL)/range)*ch;
+
+  ctx.clearRect(0,0,w,h);
+
+  // 格線
+  for(let i=0;i<=4;i++){
+    const y = pad.t + ch/4*i;
+    ctx.strokeStyle='rgba(26,34,56,.8)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+cw,y); ctx.stroke();
+    const v = maxH - range/4*i;
+    ctx.fillStyle='#48587a'; ctx.font=`9px IBM Plex Mono`; ctx.textAlign='right';
+    ctx.fillText(v.toFixed(v>100?0:2), pad.l-4, y+3);
+  }
+
+  // 投入成本線（加權均成本）
+  const recs  = loadRecs(activePlanId).filter(r=>r.price);
+  if(recs.length>0){
+    let cumInv=0, cumSH=0;
+    const wavgPts = [];
+    data.forEach((d,i)=>{
+      // 找此日期之前的所有買入
+      const dateRecs = recs.filter(r=>r.date<=d.t&&r.price);
+      if(dateRecs.length>0){
+        const inv  = dateRecs.reduce((s,r)=>s+r.amount,0);
+        const sh   = dateRecs.reduce((s,r)=>s+(r.shares||0),0);
+        const wavg = sh>0?inv/sh:0;
+        if(wavg>0&&wavg>=minL&&wavg<=maxH){
+          wavgPts.push({x:xPos(i), y:yPos(wavg)});
+        }
+      }
+    });
+    if(wavgPts.length>1){
+      ctx.beginPath(); ctx.strokeStyle='rgba(240,192,64,.6)';
+      ctx.lineWidth=1.5; ctx.setLineDash([5,4]);
+      wavgPts.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y));
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+
+  // K 線蠟燭
+  data.forEach((d,i)=>{
+    const isUp  = d.c >= d.o;
+    const color = isUp ? 'var(--green)' : 'var(--red)';
+    const x     = xPos(i);
+    const yO    = yPos(d.o), yC = yPos(d.c);
+    const yH    = yPos(d.h), yL = yPos(d.l);
+    const bodyTop    = Math.min(yO,yC);
+    const bodyHeight = Math.max(1, Math.abs(yO-yC));
+
+    ctx.strokeStyle = color; ctx.fillStyle = color;
+
+    // 影線
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x,yH); ctx.lineTo(x,bodyTop); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x,bodyTop+bodyHeight); ctx.lineTo(x,yL); ctx.stroke();
+
+    // 實體（上漲空心，下跌實心）
+    ctx.lineWidth = 1;
+    if(isUp){
+      ctx.strokeRect(x-barW/2, bodyTop, barW, bodyHeight);
+    } else {
+      ctx.fillRect(x-barW/2, bodyTop, barW, bodyHeight);
+    }
+  });
+
+  // X 軸日期
+  const step = Math.max(1, Math.floor(data.length/6));
+  ctx.fillStyle='#48587a'; ctx.font=`9px IBM Plex Mono`; ctx.textAlign='center';
+  data.forEach((d,i)=>{
+    if(i%step!==0&&i!==data.length-1) return;
+    const label = interval==='1mo' ? d.t.slice(0,7) :
+                  interval==='1wk' ? d.t.slice(5)    : d.t.slice(5);
+    ctx.fillText(label.replace('-','/'), xPos(i), h-8);
+  });
+
+  // 買入點標記
+  const recs2 = loadRecs(activePlanId).filter(r=>r.price&&r.date);
+  recs2.forEach(rec=>{
+    const idx = data.findIndex(d=>d.t>=rec.date);
+    if(idx<0) return;
+    const x = xPos(idx), y = yPos(rec.price);
+    ctx.fillStyle = 'var(--gold)';
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI*2); ctx.fill();
+  });
+}
+
+// 切換計畫時自動顯示 K 線圖
+const _origSwitchPlan2 = window.switchPlan;
+window.switchPlan = async function(id){
+  if(typeof _origSwitchPlan2==='function') _origSwitchPlan2(id);
+  const plan = loadPlans().find(p=>p.id===id);
+  if(!plan) return;
+  const kSec = document.getElementById('klineSection');
+  if(kSec) kSec.style.display='block';
+  await loadKlineData(plan.ticker);
+  drawKlineChart(plan.ticker, _klineInterval);
+};
 
 </script>
 </body>
