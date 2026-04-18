@@ -1,0 +1,62 @@
+# ============================================================
+# update_prices.yml  v1.0
+# 根治版：解決 checkout 覆寫問題 + 時區校正 + 指數納入更新
+# 變更紀錄：
+#   v1.0 - 初版，正確 checkout→script→commit 順序
+#          加入 UTC+8 台股收盤後觸發（09:05 UTC = 台灣17:05）
+#          加入 EST 美股收盤後觸發（22:05 UTC = 美東16:05）
+# ============================================================
+
+name: Update Prices & Indices
+
+on:
+  schedule:
+    # 台股收盤後（台灣時間 17:05 = UTC 09:05）
+    - cron: "5 9 * * 1-5"
+    # 美股收盤後（美東時間 16:05 = UTC 21:05，夏令）
+    - cron: "5 21 * * 1-5"
+  workflow_dispatch:  # 允許手動觸發
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # 允許 push 回 repo
+
+    steps:
+      # ① 先 checkout（只做一次，之後不再重複）
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ② 安裝 Python 套件
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install yfinance requests pytz
+
+      # ③ 執行更新腳本（在已 checkout 的 workspace 中直接修改）
+      - name: Run price & index update
+        run: python update_prices.py
+        env:
+          TZ: Asia/Taipei   # 確保 Python datetime 以台灣時區為基準
+
+      # ④ 確認是否有變更
+      - name: Check for changes
+        id: check_changes
+        run: |
+          git diff --quiet data.json || echo "changed=true" >> $GITHUB_OUTPUT
+
+      # ⑤ commit & push（只在有變更時執行，避免空 commit）
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data.json
+          git commit -m "chore: auto-update prices & indices $(date +'%Y-%m-%d %H:%M %Z')"
+          git push
