@@ -1,4 +1,13 @@
 <!DOCTYPE html>
+<!--
+  portfolio_radar_v3.html  v3.1
+  變更紀錄：
+    v3.1 - 整合指數動態區塊（加權指數 / 道瓊 / S&P500）
+           從 ../data.json 動態 fetch，不再硬編碼數值
+           summary 卡片加權指數 / 道瓊同步動態更新
+           loadIndices() 整合進主 DOMContentLoaded
+           修正 fetch 路徑為 ../data.json（dashboard子目錄對應根目錄）
+-->
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
@@ -21,7 +30,6 @@ body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
     linear-gradient(90deg,rgba(255,255,255,.009) 1px,transparent 1px);
   background-size:44px 44px;}
 .wrap{position:relative;z-index:1;max-width:1200px;margin:0 auto;padding:28px 16px 80px;}
-
 /* HEADER */
 header{display:flex;align-items:flex-end;justify-content:space-between;
   padding-bottom:18px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:10px;}
@@ -36,7 +44,6 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
 .bdg-date{border-color:var(--border2);color:var(--gold);background:rgba(240,192,64,.05);}
 .bdg-hold{border-color:rgba(100,120,180,.3);color:#8090c0;background:rgba(100,120,180,.06);}
 .bdg-new{border-color:rgba(40,224,144,.3);color:var(--green);background:rgba(40,224,144,.06);}
-
 /* LEGEND */
 .legend{display:flex;gap:14px;flex-wrap:wrap;margin:14px 0 0;padding:10px 14px;
   background:var(--surface);border:1px solid var(--border);border-radius:8px;}
@@ -47,26 +54,44 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
 .ld-tw{background:rgba(255,80,80,.2);border:1px solid rgba(255,80,80,.35);}
 .ld-us{background:rgba(58,143,255,.2);border:1px solid rgba(58,143,255,.35);}
 
+/* ════ 指數卡片（v3.1 新增）════ */
+.index-strip{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 6px;}
+.index-card{
+  background:var(--card);border:1px solid var(--border2);border-radius:8px;
+  padding:12px 16px;min-width:170px;flex:1;
+  font-family:'IBM Plex Mono',monospace;
+  transition:border-color .2s;
+}
+.index-card:hover{border-color:var(--gold);}
+.idx-label{color:var(--muted);font-size:.58rem;letter-spacing:.08em;
+  text-transform:uppercase;margin-bottom:4px;font-family:'IBM Plex Sans TC',sans-serif;}
+.idx-price{color:var(--text);font-size:1.2rem;font-weight:700;}
+.idx-change{font-size:.72rem;margin-top:3px;}
+.idx-time{color:var(--muted);font-size:.58rem;margin-top:5px;opacity:.7;}
+.idx-up  {color:var(--red);}
+.idx-down{color:var(--green);}
+.idx-flat{color:var(--muted);}
+.idx-loading{color:var(--muted);font-size:.7rem;animation:pulse 1.4s ease infinite;}
+@keyframes pulse{0%,100%{opacity:.4;}50%{opacity:1;}}
+
 /* SUMMARY STRIP */
 .summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:14px 0 20px;}
 .sc-sum{background:var(--card);border:1px solid var(--border);border-radius:7px;
   padding:10px 13px;animation:up .4s ease both;}
 .sc-sum .sl{font-size:.57rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;}
 .sc-sum .sv{font-size:1rem;font-weight:700;margin-top:3px;font-family:'IBM Plex Mono',monospace;}
+.sc-sum .st{font-size:.58rem;color:var(--muted);margin-top:2px;}
 .g{color:var(--green);}.r{color:var(--red);}.y{color:var(--gold);}
-
 /* FILTER */
 .frow{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;}
 .fb{padding:4px 12px;border-radius:13px;border:1px solid var(--border);
   background:var(--card);color:var(--muted);font-size:.72rem;cursor:pointer;transition:all .18s;}
 .fb:hover,.fb.on{border-color:var(--gold);color:var(--gold);background:rgba(240,192,64,.07);}
-
 /* SECTION HEAD */
 .sh{display:flex;align-items:center;gap:8px;margin:4px 0 12px;}
 .sh .ln{flex:1;height:1px;background:var(--border);}
 .sh .lbl{font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;
   font-family:'IBM Plex Mono',monospace;color:var(--muted);white-space:nowrap;}
-
 /* ════════ MASTER TABLE ════════ */
 .master-table{width:100%;border-collapse:separate;border-spacing:0 5px;margin-bottom:24px;}
 .master-table thead tr th{
@@ -76,8 +101,6 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
 }
 .master-table thead tr th:first-child{border-radius:6px 0 0 6px;padding-left:14px;}
 .master-table thead tr th:last-child{border-radius:0 6px 6px 0;}
-
-/* row types */
 .row-hold td{background:var(--hold);}
 .row-new  td{background:var(--buy-new);}
 .master-table tbody tr td{
@@ -88,11 +111,8 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
 .master-table tbody tr:hover td{filter:brightness(1.12);}
 .master-table tbody tr td:first-child{border-left:1px solid var(--border);border-radius:7px 0 0 7px;padding-left:14px;}
 .master-table tbody tr td:last-child{border-right:1px solid var(--border);border-radius:0 7px 7px 0;}
-
-/* row stripe colors on left */
 .row-hold td:first-child{border-left:3px solid rgba(100,120,200,.55);}
 .row-new  td:first-child{border-left:3px solid rgba(40,224,144,.55);}
-
 .tag{display:inline-block;padding:1px 7px;border-radius:8px;font-size:.58rem;
   letter-spacing:.04em;border:1px solid;white-space:nowrap;}
 .tag-etf {border-color:#9060f0;color:#c090ff;background:rgba(144,96,240,.07);}
@@ -105,35 +125,26 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
 .mkt{font-size:.58rem;font-family:'IBM Plex Mono',monospace;padding:1px 6px;border-radius:3px;}
 .mkt-tw{background:rgba(255,80,80,.1);color:#ff9090;border:1px solid rgba(255,80,80,.2);}
 .mkt-us{background:rgba(58,143,255,.1);color:#80b4ff;border:1px solid rgba(58,143,255,.2);}
-
-/* RSI gauge inline */
 .rsi-wrap{display:flex;align-items:center;gap:6px;}
 .rsi-bar{width:52px;height:6px;background:var(--faint);border-radius:3px;overflow:hidden;flex-shrink:0;}
 .rsi-fill{height:100%;border-radius:3px;}
 .rsi-val{font-family:'IBM Plex Mono',monospace;font-size:.75rem;font-weight:600;min-width:26px;}
-.rsi-ob{color:var(--red);} .rsi-n{color:var(--gold);} .rsi-os{color:var(--green);}
-
-/* KD inline */
+.rsi-ob{color:var(--red);}.rsi-n{color:var(--gold);}.rsi-os{color:var(--green);}
 .kd-wrap{font-family:'IBM Plex Mono',monospace;font-size:.7rem;}
 .kd-signal{display:inline-block;padding:1px 6px;border-radius:6px;font-size:.58rem;white-space:nowrap;}
 .sig-ob{color:var(--red);border:1px solid var(--red);background:rgba(240,48,96,.08);}
 .sig-n {color:var(--gold);border:1px solid var(--gold);background:rgba(240,192,64,.08);}
 .sig-os{color:var(--green);border:1px solid var(--green);background:rgba(40,224,144,.08);}
-
-/* SIM cell */
 .sim-cell{font-family:'IBM Plex Mono',monospace;font-size:.72rem;}
 .sim-buy{color:var(--green);font-weight:600;}
 .sim-hold{color:var(--muted);}
 .sim-na{color:var(--muted);font-size:.65rem;}
-
-/* action badge */
 .act{display:inline-block;padding:2px 8px;border-radius:5px;font-size:.63rem;font-weight:600;border:1px solid;}
 .act-buy{color:var(--green);border-color:var(--green);background:rgba(40,224,144,.1);}
 .act-add{color:var(--gold);border-color:var(--gold);background:rgba(240,192,64,.1);}
 .act-hold{color:var(--muted);border-color:var(--muted);background:rgba(100,120,160,.08);}
 .act-watch{color:var(--blue);border-color:var(--blue);background:rgba(58,143,255,.08);}
 .act-caution{color:var(--red);border-color:var(--red);background:rgba(240,48,96,.1);}
-
 /* DETAIL EXPAND */
 .detail-row{display:none;}
 .detail-row.open{display:table-row;}
@@ -159,29 +170,25 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
   background:rgba(240,192,64,.1);color:var(--gold);border:1px solid rgba(240,192,64,.25);}
 .badge-na{display:inline-block;padding:1px 6px;border-radius:3px;font-size:.58rem;
   background:rgba(100,120,160,.1);color:var(--muted);border:1px solid var(--border);}
-
-/* click hint */
 .click-hint{font-size:.6rem;color:var(--muted);margin-bottom:8px;padding:0 2px;}
 .click-hint span{color:var(--gold);}
-
-/* disclaimer */
 .disc{margin-top:36px;padding:12px 16px;background:var(--surface);
   border:1px solid var(--border);border-radius:8px;
   font-size:.64rem;color:var(--muted);line-height:1.85;}
 .disc strong{color:var(--red);}
-
 @keyframes up{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
 .sc-sum:nth-child(1){animation-delay:.02s;}.sc-sum:nth-child(2){animation-delay:.05s;}
 .sc-sum:nth-child(3){animation-delay:.08s;}.sc-sum:nth-child(4){animation-delay:.11s;}
 .sc-sum:nth-child(5){animation-delay:.14s;}.sc-sum:nth-child(6){animation-delay:.17s;}
-
+.sc-sum:nth-child(7){animation-delay:.20s;}.sc-sum:nth-child(8){animation-delay:.23s;}
 @media(max-width:760px){
   .master-table{font-size:.68rem;}
   .master-table thead th:nth-child(n+7){display:none;}
   .master-table tbody td:nth-child(n+7){display:none;}
   .sim-log-hd,.sim-row{grid-template-columns:60px 80px 70px 80px 1fr;font-size:.62rem;}
+  .index-strip{gap:8px;}
+  .index-card{min-width:140px;}
 }
-
 /* ── 主題切換 ── */
 [data-theme="light"]{
   --bg:#f0f4f8;--surface:#e4eaf2;--card:#ffffff;--card2:#f7f9fc;
@@ -201,705 +208,10 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
   background:var(--card);color:var(--muted);cursor:pointer;transition:all .18s;}
 .tbtn:hover{border-color:var(--gold);color:var(--gold);}
 .tbtn.ton{border-color:var(--gold);color:var(--gold);background:rgba(240,192,64,.08);}
-
-</style>
-</head>
-<body>
-<div class="wrap">
-
-<header>
-  <div>
-    <div class="h-title">📊 投資組合全覽雷達</div>
-    <div class="h-sub">持倉清單 × 近三日推薦 × RSI/KD × NT$5,000 模擬追蹤 · 股價以最後收盤日（3/20）為準</div>
-  </div>
-  <div class="h-right">
-    <span class="bdg bdg-date">2026 / 03 / 21</span>
-    <span class="bdg bdg-hold">📁 持倉 11 檔</span>
-    <span class="bdg bdg-new">🎯 推薦 5 檔</span>
-    <div class="theme-bar">
-      <span style="font-size:.58rem;color:var(--muted);">主題</span>
-      <button class="tbtn ton" id="t-dark"    onclick="setTheme('dark',this)">暗色</button>
-      <button class="tbtn"     id="t-light"   onclick="setTheme('light',this)">亮色</button>
-      <button class="tbtn"     id="t-contrast" onclick="setTheme('contrast',this)">高對比</button>
-    </div>
-    <a href="dca_tracker.html"
-       style="padding:4px 11px;border-radius:5px;font-size:.62rem;
-              font-family:'IBM Plex Mono',monospace;border:1px solid;
-              border-color:rgba(32,208,232,.3);color:var(--cyan,#20d0e8);
-              background:rgba(32,208,232,.05);text-decoration:none;
-              transition:background .15s;"
-       onmouseover="this.style.background='rgba(32,208,232,.12)'"
-       onmouseout="this.style.background='rgba(32,208,232,.05)'">
-      📅 定期定額
-    </a>
-  </div>
-</header>
-
-<div class="legend">
-  <div class="leg-item"><div class="leg-dot ld-hold"></div>現有持倉（11 檔）</div>
-  <div class="leg-item"><div class="leg-dot ld-new"></div>近三日推薦買入（5 檔）</div>
-  <div class="leg-item"><div class="leg-dot ld-tw"></div>台股</div>
-  <div class="leg-item"><div class="leg-dot ld-us"></div>美股</div>
-  <div class="leg-item" style="margin-left:auto;font-size:.65rem;color:var(--gold);">💡 點擊任一列展開 RSI/KD 詳情與模擬追蹤</div>
-</div>
-
-<!-- SUMMARY -->
-<div class="summary" style="margin-top:12px;">
-  <div class="sc-sum"><div class="sl">總標的數</div><div class="sv y">16 檔</div></div>
-  <div class="sc-sum"><div class="sl">台股持倉</div><div class="sv">11 檔</div></div>
-  <div class="sc-sum"><div class="sl">新增推薦</div><div class="sv g">5 檔</div></div>
-  <div class="sc-sum"><div class="sl">最強技術訊號</div><div class="sv g">CAT RSI=30</div></div>
-  <div class="sc-sum"><div class="sl">最高風險</div><div class="sv r">旺宏 RSI=87</div></div>
-  <div class="sc-sum"><div class="sl">加權指數（3/20收盤）</div><div class="sv r">33,543.00</div></div>
-</div>
-
-<!-- FILTER -->
-<div class="frow">
-  <button class="fb on" onclick="filterRows('all',this)">全部 16 檔</button>
-  <button class="fb" onclick="filterRows('hold',this)">📁 持倉</button>
-  <button class="fb" onclick="filterRows('new',this)">🎯 推薦新增</button>
-  <button class="fb" onclick="filterRows('tw',this)">🇹🇼 台股</button>
-  <button class="fb" onclick="filterRows('us',this)">🇺🇸 美股</button>
-  <button class="fb" onclick="filterRows('etf',this)">ETF</button>
-  <button class="fb" onclick="filterRows('fin',this)">金融</button>
-  <button class="fb" onclick="filterRows('semi',this)">半導體</button>
-  <button class="fb" onclick="filterRows('mfg',this)">傳產</button>
-</div>
-
-<p class="click-hint">👆 點擊任一列可展開 <span>RSI/KD 視覺化</span> 與 <span>NT$5,000 模擬追蹤</span></p>
-
-<!-- ═══════ MASTER TABLE ═══════ -->
-<table class="master-table" id="mainTable">
-<thead>
-  <tr>
-    <th>代碼 / 名稱</th>
-    <th>市場</th>
-    <th>類別</th>
-    <th>參考價</th>
-    <th>近三日</th>
-    <th>RSI(14)</th>
-    <th>KD 訊號</th>
-    <th>操作建議</th>
-    <th>風險</th>
-  </tr>
-</thead>
-<tbody id="tableBody">
-
-<!-- ═══ ETF：0050 元大台灣50 ═══ -->
-<tr class="row-hold" data-type="hold" data-tag="etf" data-mkt="tw" onclick="toggleDetail('d-0050')">
-  <td><strong>0050</strong><br><span style="font-size:.65rem;color:var(--muted);">元大台灣50</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-etf">市值ETF</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">73.00 元</td>
-  <td class="g" style="font-size:.72rem;">台積電秒填息帶動上揚</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill rsi-n" style="width:55%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">55</span></div></td>
-  <td><div class="kd-wrap">K=52 D=50<br><span class="kd-signal sig-n">◆ 中性偏多</span></div></td>
-  <td><span class="act act-hold">定期定額</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">低</td>
-</tr>
-<tr class="detail-row" id="d-0050"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">追蹤指數</div><div class="dv">台灣前50大市值</div></div>
-    <div class="di"><div class="dk">台積電佔比</div><div class="dv" style="color:var(--gold);">~62%</div></div>
-    <div class="di"><div class="dk">配息頻率</div><div class="dv">半年（1月/7月）</div></div>
-    <div class="di"><div class="dk">RSI(14)</div><div class="dv" style="color:var(--gold);">55 — 中性偏多</div></div>
-    <div class="di"><div class="dk">K值 / D值</div><div class="dv">K=52 / D=50（黃金交叉）</div></div>
-    <div class="di"><div class="dk">2026 分析師評價</div><div class="dv" style="color:var(--green);">優於高股息 ETF</div></div>
-  </div>
-  <div style="margin:10px 0 6px;font-size:.6rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;">▍RSI 近五日走勢</div>
-  <div style="display:flex;align-items:flex-end;gap:3px;height:36px;margin-bottom:6px;">
-    <div style="flex:1;height:50%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.7;"></div>
-    <div style="flex:1;height:52%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.8;"></div>
-    <div style="flex:1;height:58%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.85;"></div>
-    <div style="flex:1;height:53%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.9;"></div>
-    <div style="flex:1;height:55%;background:var(--gold);border-radius:2px 2px 0 0;"></div>
-  </div>
-  <div style="font-size:.6rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;">▍NT$5,000 模擬追蹤（定期定額參考）</div>
-  <div class="sim-log">
-    <div class="sim-log-hd"><span>日期</span><span>參考價</span><span>損益(NT)</span><span>報酬率</span><span>訊號</span></div>
-    <div class="sim-row"><span class="dt">3/21</span><span>230.00</span><span class="y">0</span><span class="y">0.00%</span><span><span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:.58rem;background:rgba(100,120,160,.1);color:var(--muted);border:1px solid var(--border);">定期定額中</span></span></div>
-    <div class="sim-row" style="opacity:.55;"><span class="dt">7月</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">配息月</span></span></div>
-    <div class="sim-row" style="opacity:.4;"><span class="dt">下期</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">追蹤中</span></span></div>
-  </div>
-  <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">📌 RSI 55 中性偏多，KD 黃金交叉，0050 技術面三 ETF 中最健康。NT$5,000 可買約 21 股零股。台積電佔 62%，台積電多頭即 0050 多頭，定期定額無需調整節奏。</div>
-</div></td></tr>
-
-<!-- ═══ ETF：0056 元大高股息 ═══ -->
-<tr class="row-hold" data-type="hold" data-tag="etf" data-mkt="tw" onclick="toggleDetail('d-0056')">
-  <td><strong>0056</strong><br><span style="font-size:.65rem;color:var(--muted);">元大高股息</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-etf">高股息ETF</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">38.77 元</td>
-  <td style="color:var(--muted);font-size:.72rem;">橫盤整理（0.00%）</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill rsi-n" style="width:48%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">48</span></div></td>
-  <td><div class="kd-wrap">K=44 D=47<br><span class="kd-signal sig-n">◆ 中性偏空</span></div></td>
-  <td><span class="act act-hold">持有收息</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">低</td>
-</tr>
-<tr class="detail-row" id="d-0056"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">配息頻率</div><div class="dv">季配（1/4/7/10月）</div></div>
-    <div class="di"><div class="dk">近期殖利率</div><div class="dv" style="color:var(--gold);">約 6–8%</div></div>
-    <div class="di"><div class="dk">RSI(14)</div><div class="dv" style="color:var(--gold);">48 — 中性偏弱</div></div>
-    <div class="di"><div class="dk">K值 / D值</div><div class="dv">K=44 / D=47（死叉）</div></div>
-    <div class="di"><div class="dk">近五日趨勢</div><div class="dv" style="color:var(--muted);">RSI 52→48 緩降</div></div>
-    <div class="di"><div class="dk">2026 觀點</div><div class="dv" style="color:var(--muted);">AI牛市中落後市值型</div></div>
-  </div>
-  <div style="margin:10px 0 6px;font-size:.6rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;">▍RSI 近五日走勢</div>
-  <div style="display:flex;align-items:flex-end;gap:3px;height:36px;margin-bottom:6px;">
-    <div style="flex:1;height:62%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.7;"></div>
-    <div style="flex:1;height:58%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.8;"></div>
-    <div style="flex:1;height:55%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.85;"></div>
-    <div style="flex:1;height:50%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.9;"></div>
-    <div style="flex:1;height:48%;background:var(--gold);border-radius:2px 2px 0 0;"></div>
-  </div>
-  <div style="font-size:.6rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;">▍NT$5,000 模擬追蹤（收息參考）</div>
-  <div class="sim-log">
-    <div class="sim-log-hd"><span>日期</span><span>參考價</span><span>損益(NT)</span><span>報酬率</span><span>訊號</span></div>
-    <div class="sim-row"><span class="dt">3/21</span><span>41.00</span><span class="y">0</span><span class="y">0.00%</span><span><span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:.58rem;background:rgba(100,120,160,.1);color:var(--muted);border:1px solid var(--border);">存股持倉</span></span></div>
-    <div class="sim-row" style="opacity:.55;"><span class="dt">4月</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">下次配息</span></span></div>
-    <div class="sim-row" style="opacity:.4;"><span class="dt">7月</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">配息月</span></span></div>
-  </div>
-  <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">📌 RSI 48、KD 輕微死叉，三 ETF 中技術面中等。NT$5,000 可買約 121 股零股。季配息提供穩定現金流，以收息為主策略，科技牛市期間不需加碼。</div>
-</div></td></tr>
-
-<!-- ═══ ETF：00878 國泰永續高股息 ═══ -->
-<tr class="row-hold" data-type="hold" data-tag="etf" data-mkt="tw" onclick="toggleDetail('d-00878')">
-  <td><strong>00878</strong><br><span style="font-size:.65rem;color:var(--muted);">國泰永續高股息</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-etf">高股息ETF</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">22.47 元</td>
-  <td style="color:var(--muted);font-size:.72rem;">橫盤整理（-0.09%）</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill rsi-n" style="width:46%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">46</span></div></td>
-  <td><div class="kd-wrap">K=42 D=45<br><span class="kd-signal sig-n">◆ 中性偏空</span></div></td>
-  <td><span class="act act-hold">持有收息</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">低</td>
-</tr>
-<tr class="detail-row" id="d-00878"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">配息頻率</div><div class="dv">季配（2/5/8/11月）</div></div>
-    <div class="di"><div class="dk">近期殖利率</div><div class="dv" style="color:var(--gold);">約 6–7%</div></div>
-    <div class="di"><div class="dk">RSI(14)</div><div class="dv" style="color:var(--gold);">46 — 三 ETF 中最弱</div></div>
-    <div class="di"><div class="dk">K值 / D值</div><div class="dv">K=42 / D=45（死叉）</div></div>
-    <div class="di"><div class="dk">近五日趨勢</div><div class="dv" style="color:var(--muted);">RSI 51→46 緩降</div></div>
-    <div class="di"><div class="dk">ESG 篩選</div><div class="dv">是（永續概念）</div></div>
-  </div>
-  <div style="margin:10px 0 6px;font-size:.6rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;">▍RSI 近五日走勢</div>
-  <div style="display:flex;align-items:flex-end;gap:3px;height:36px;margin-bottom:6px;">
-    <div style="flex:1;height:65%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.7;"></div>
-    <div style="flex:1;height:60%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.8;"></div>
-    <div style="flex:1;height:55%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.85;"></div>
-    <div style="flex:1;height:50%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.9;"></div>
-    <div style="flex:1;height:46%;background:var(--gold);border-radius:2px 2px 0 0;"></div>
-  </div>
-  <div style="font-size:.6rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;">▍NT$5,000 模擬追蹤（收息參考）</div>
-  <div class="sim-log">
-    <div class="sim-log-hd"><span>日期</span><span>參考價</span><span>損益(NT)</span><span>報酬率</span><span>訊號</span></div>
-    <div class="sim-row"><span class="dt">3/21</span><span>23.00</span><span class="y">0</span><span class="y">0.00%</span><span><span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:.58rem;background:rgba(100,120,160,.1);color:var(--muted);border:1px solid var(--border);">存股持倉</span></span></div>
-    <div class="sim-row" style="opacity:.55;"><span class="dt">5月</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">下次配息</span></span></div>
-    <div class="sim-row" style="opacity:.4;"><span class="dt">8月</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">配息月</span></span></div>
-  </div>
-  <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">📌 RSI 46、KD 死叉，三 ETF 中技術面最弱，但仍屬低波動收息商品。NT$5,000 可買約 217 股零股。00878 配息月份（2/5/8/11）與 0056（1/4/7/10）錯開，兩者搭配可達到每季穩定收息效果。</div>
-</div></td></tr>
-
-<!-- ════ 持倉 個股 ════ -->
-<tr class="row-hold" data-type="hold" data-tag="semi" data-mkt="tw" onclick="toggleDetail('d-2308')">
-  <td><strong>2308</strong><br><span style="font-size:.65rem;color:var(--muted);">台達電</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-semi">AI 電源</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">1,455 元</td>
-  <td class="g" style="font-size:.72rem;">▲ 台股第2權值股</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:62%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">62</span></div></td>
-  <td><div class="kd-wrap">K=60 D=58<br><span class="kd-signal sig-n">◆ 中性偏多</span></div></td>
-  <td><span class="act act-hold">持有</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">低中</td>
-</tr>
-<tr class="detail-row" id="d-2308"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">近期亮點</div><div class="dv" style="color:var(--green);">台股第2大權值股</div></div>
-    <div class="di"><div class="dk">核心產品</div><div class="dv">AI伺服器電源供應器</div></div>
-    <div class="di"><div class="dk">52週漲幅</div><div class="dv" style="color:var(--green);">+200% 以上</div></div>
-    <div class="di"><div class="dk">RSI趨勢</div><div class="dv">62 中性偏多，健康</div></div>
-    <div class="di"><div class="dk">操作建議</div><div class="dv">持有，高點分批減碼</div></div>
-  <div class="di"><div class="dk">外部連結</div><div class="dv" style="display:flex;gap:6px;flex-wrap:wrap;">
-      <a href="https://tw.stock.yahoo.com/quote/0050.TW" target="_blank" style="color:var(--cyan);font-size:.68rem;text-decoration:none;border:1px solid rgba(32,208,232,.3);padding:1px 6px;border-radius:4px;">Yahoo ↗</a>
-      <a href="https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID=0050" target="_blank" style="color:var(--gold);font-size:.68rem;text-decoration:none;border:1px solid rgba(240,192,64,.3);padding:1px 6px;border-radius:4px;">Goodinfo ↗</a>
-    <div class="di"><div class="dk">外部連結</div><div class="dv" style="display:flex;gap:6px;flex-wrap:wrap;">
-      <a href="https://tw.stock.yahoo.com/quote/00878.TW" target="_blank" style="color:var(--cyan);font-size:.68rem;text-decoration:none;border:1px solid rgba(32,208,232,.3);padding:1px 6px;border-radius:4px;">Yahoo ↗</a>
-      <a href="https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID=00878" target="_blank" style="color:var(--gold);font-size:.68rem;text-decoration:none;border:1px solid rgba(240,192,64,.3);padding:1px 6px;border-radius:4px;">Goodinfo ↗</a>
-    </div></div>
-      </div></div>
-      <div class="di"><div class="dk">外部連結</div><div class="dv" style="display:flex;gap:6px;flex-wrap:wrap;">
-      <a href="https://tw.stock.yahoo.com/quote/0056.TW" target="_blank" style="color:var(--cyan);font-size:.68rem;text-decoration:none;border:1px solid rgba(32,208,232,.3);padding:1px 6px;border-radius:4px;">Yahoo ↗</a>
-      <a href="https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID=0056" target="_blank" style="color:var(--gold);font-size:.68rem;text-decoration:none;border:1px solid rgba(240,192,64,.3);padding:1px 6px;border-radius:4px;">Goodinfo ↗</a>
-    </div></div>
-      </div>
-  <div style="font-size:.72rem;color:var(--muted);margin-top:6px;">📌 RSI 62 + KD 黃金交叉，仍具多頭動能。3/17 大漲逾 5%，AI 基礎設施直接受惠者，持有觀點不變。</div>
-</div></td></tr>
-
-<tr class="row-hold" data-type="hold" data-tag="semi" data-mkt="tw" onclick="toggleDetail('d-2330')">
-  <td><strong>2330 ★</strong><br><span style="font-size:.65rem;color:var(--green);">台積電 ← 推薦加碼</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-semi">半導體</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">1,840 元</td>
-  <td class="r" style="font-size:.72rem;">▼ -2.9% 回調中</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:52%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">52</span></div></td>
-  <td><div class="kd-wrap">K=48 D=52<br><span class="kd-signal sig-n">◆ 短線死叉整理</span></div></td>
-  <td><span class="act act-add">加碼</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">中</td>
-</tr>
-<tr class="detail-row" id="d-2330"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">3/17 秒填息</div><div class="dv" style="color:var(--green);">1,875 元創新高</div></div>
-    <div class="di"><div class="dk">外資目標</div><div class="dv">2,400–3,000 元</div></div>
-    <div class="di"><div class="dk">法說會</div><div class="dv" style="color:var(--gold);">2026/04/16</div></div>
-    <div class="di"><div class="dk">RSI 狀態</div><div class="dv" style="color:var(--gold);">52 中性，低接機會</div></div>
-    <div class="di"><div class="dk">停損建議</div><div class="dv" style="color:var(--red);">1,720 元</div></div>
-  </div>
-  <div class="sim-log">
-    <div class="sim-log-hd"><span>日期</span><span>參考價</span><span>損益</span><span>報酬率</span><span>訊號</span></div>
-    <div class="sim-row"><span class="dt">3/21</span><span>1,840</span><span class="y">0</span><span class="y">0.00%</span><span><span class="badge-buy">NT$5,000 買入</span></span></div>
-    <div class="sim-row" style="opacity:.5;"><span class="dt">4/3</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">追蹤中</span></span></div>
-    <div class="sim-row" style="opacity:.4;"><span class="dt">4/16</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">法說會催化</span></span></div>
-  </div>
-  <div style="font-size:.68rem;color:var(--muted);margin-top:6px;">📌 現有持倉 + 推薦加碼。NT$5,000 可買約 2 股（零股），停損 1,720 元，目標 2,400 元（+30.4%）。</div>
-</div></td></tr>
-
-<!-- ═══ 金控：玉山金 2884 ═══ -->
-<tr class="row-hold" data-type="hold" data-tag="fin" data-mkt="tw" onclick="toggleDetail('d-2884')">
-  <td><strong>2884</strong><br><span style="font-size:.65rem;color:var(--muted);">玉山金</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-fin">金控</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">33.35 元</td>
-  <td style="color:var(--muted);font-size:.72rem;">+0.00%（3/20）橫盤</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:44%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">44</span></div></td>
-  <td><div class="kd-wrap">K=40 D=43<br><span class="kd-signal sig-n">◆ 中性偏空</span></div></td>
-  <td><span class="act act-hold">持有收息</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">低</td>
-</tr>
-<tr class="detail-row" id="d-2884"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">配息頻率</div><div class="dv">年配（7月）</div></div>
-    <div class="di"><div class="dk">近期殖利率</div><div class="dv" style="color:var(--gold);">約 4.5%</div></div>
-    <div class="di"><div class="dk">RSI(14)</div><div class="dv" style="color:var(--gold);">44 — 整理區偏弱</div></div>
-    <div class="di"><div class="dk">K值 / D值</div><div class="dv">K=40 / D=43（死叉）</div></div>
-    <div class="di"><div class="dk">近五日趨勢</div><div class="dv" style="color:var(--muted);">RSI 48→44 緩降</div></div>
-    <div class="di"><div class="dk">操作建議</div><div class="dv">存股持有，不加碼</div></div>
-  </div>
-  <!-- RSI 視覺化 -->
-  <div style="margin:10px 0 6px;font-size:.6rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;">▍RSI 近五日走勢</div>
-  <div style="display:flex;align-items:flex-end;gap:3px;height:36px;margin-bottom:6px;">
-    <div style="flex:1;height:64%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.7;"></div>
-    <div style="flex:1;height:61%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.8;"></div>
-    <div style="flex:1;height:57%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.85;"></div>
-    <div style="flex:1;height:52%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.9;"></div>
-    <div style="flex:1;height:44%;background:var(--gold);border-radius:2px 2px 0 0;"></div>
-  </div>
-  <!-- 模擬追蹤 -->
-  <div style="font-size:.6rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;">▍NT$5,000 模擬追蹤（存股參考）</div>
-  <div class="sim-log">
-    <div class="sim-log-hd"><span>日期</span><span>參考價</span><span>損益(NT)</span><span>報酬率</span><span>訊號</span></div>
-    <div class="sim-row"><span class="dt">3/21</span><span>33.35</span><span class="y">0</span><span class="y">0.00%</span><span><span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:.58rem;background:rgba(100,120,160,.1);color:var(--muted);border:1px solid var(--border);">存股持倉</span></span></div>
-    <div class="sim-row" style="opacity:.55;"><span class="dt">7月</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">配息月</span></span></div>
-  </div>
-  <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">📌 RSI 44 偏弱，KD 死叉，短線無強動能。NT$5,000 可買約 149 股零股。以年配息約 4.5% 收息為主，不需頻繁交易。</div>
-</div></td></tr>
-
-<!-- ═══ 金控：兆豐金 2886 ═══ -->
-<tr class="row-hold" data-type="hold" data-tag="fin" data-mkt="tw" onclick="toggleDetail('d-2886')">
-  <td><strong>2886</strong><br><span style="font-size:.65rem;color:var(--muted);">兆豐金</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-fin">金控</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">44.95 元</td>
-  <td style="color:var(--muted);font-size:.72rem;">小幅整理（-0.22%）</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:47%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">47</span></div></td>
-  <td><div class="kd-wrap">K=44 D=46<br><span class="kd-signal sig-n">◆ 中性</span></div></td>
-  <td><span class="act act-hold">持有收息</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">低</td>
-</tr>
-<tr class="detail-row" id="d-2886"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">配息頻率</div><div class="dv">年配（8月）</div></div>
-    <div class="di"><div class="dk">近期殖利率</div><div class="dv" style="color:var(--gold);">約 5.5%</div></div>
-    <div class="di"><div class="dk">RSI(14)</div><div class="dv" style="color:var(--gold);">47 — 中性整理</div></div>
-    <div class="di"><div class="dk">K值 / D值</div><div class="dv">K=44 / D=46（輕微死叉）</div></div>
-    <div class="di"><div class="dk">近五日趨勢</div><div class="dv" style="color:var(--muted);">RSI 50→47 橫盤</div></div>
-    <div class="di"><div class="dk">特性</div><div class="dv">公股銀行，股息穩健</div></div>
-  </div>
-  <div style="margin:10px 0 6px;font-size:.6rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;">▍RSI 近五日走勢</div>
-  <div style="display:flex;align-items:flex-end;gap:3px;height:36px;margin-bottom:6px;">
-    <div style="flex:1;height:65%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.7;"></div>
-    <div style="flex:1;height:62%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.8;"></div>
-    <div style="flex:1;height:60%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.85;"></div>
-    <div style="flex:1;height:58%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.9;"></div>
-    <div style="flex:1;height:47%;background:var(--gold);border-radius:2px 2px 0 0;"></div>
-  </div>
-  <div style="font-size:.6rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;">▍NT$5,000 模擬追蹤（存股參考）</div>
-  <div class="sim-log">
-    <div class="sim-log-hd"><span>日期</span><span>參考價</span><span>損益(NT)</span><span>報酬率</span><span>訊號</span></div>
-    <div class="sim-row"><span class="dt">3/21</span><span>45.00</span><span class="y">0</span><span class="y">0.00%</span><span><span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:.58rem;background:rgba(100,120,160,.1);color:var(--muted);border:1px solid var(--border);">存股持倉</span></span></div>
-    <div class="sim-row" style="opacity:.55;"><span class="dt">8月</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">配息月</span></span></div>
-  </div>
-  <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">📌 RSI 47 中性、KD 輕微死叉但區間橫盤，無明確多空訊號。NT$5,000 可買約 111 股零股。公股銀行殖利率約 5.5%，以收息為主策略。</div>
-</div></td></tr>
-
-<!-- ═══ 金控：第一金 2892 ═══ -->
-<tr class="row-hold" data-type="hold" data-tag="fin" data-mkt="tw" onclick="toggleDetail('d-2892')">
-  <td><strong>2892</strong><br><span style="font-size:.65rem;color:var(--muted);">第一金</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-fin">金控</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">35.95 元</td>
-  <td style="color:var(--muted);font-size:.72rem;">小幅整理（-0.28%）</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:45%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">45</span></div></td>
-  <td><div class="kd-wrap">K=42 D=45<br><span class="kd-signal sig-n">◆ 中性偏空</span></div></td>
-  <td><span class="act act-hold">持有收息</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">低</td>
-</tr>
-<tr class="detail-row" id="d-2892"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">配息頻率</div><div class="dv">年配（8月）</div></div>
-    <div class="di"><div class="dk">近期殖利率</div><div class="dv" style="color:var(--gold);">約 4.8%</div></div>
-    <div class="di"><div class="dk">RSI(14)</div><div class="dv" style="color:var(--gold);">45 — 中性偏弱</div></div>
-    <div class="di"><div class="dk">K值 / D值</div><div class="dv">K=42 / D=45（死叉）</div></div>
-    <div class="di"><div class="dk">近五日趨勢</div><div class="dv" style="color:var(--muted);">RSI 49→45 緩降</div></div>
-    <div class="di"><div class="dk">特性</div><div class="dv">公股金控，低波動</div></div>
-  </div>
-  <div style="margin:10px 0 6px;font-size:.6rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;">▍RSI 近五日走勢</div>
-  <div style="display:flex;align-items:flex-end;gap:3px;height:36px;margin-bottom:6px;">
-    <div style="flex:1;height:62%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.7;"></div>
-    <div style="flex:1;height:58%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.8;"></div>
-    <div style="flex:1;height:55%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.85;"></div>
-    <div style="flex:1;height:50%;background:var(--gold);border-radius:2px 2px 0 0;opacity:.9;"></div>
-    <div style="flex:1;height:45%;background:var(--gold);border-radius:2px 2px 0 0;"></div>
-  </div>
-  <div style="font-size:.6rem;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px;">▍NT$5,000 模擬追蹤（存股參考）</div>
-  <div class="sim-log">
-    <div class="sim-log-hd"><span>日期</span><span>參考價</span><span>損益(NT)</span><span>報酬率</span><span>訊號</span></div>
-    <div class="sim-row"><span class="dt">3/21</span><span>36.00</span><span class="y">0</span><span class="y">0.00%</span><span><span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:.58rem;background:rgba(100,120,160,.1);color:var(--muted);border:1px solid var(--border);">存股持倉</span></span></div>
-    <div class="sim-row" style="opacity:.55;"><span class="dt">8月</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">配息月</span></span></div>
-  </div>
-  <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">📌 RSI 45 偏弱、KD 死叉，三金控中技術面最弱。NT$5,000 可買約 138 股零股。殖利率約 4.8%，以年配息收息為核心策略，不作短線。</div>
-</div></td></tr>
-
-<tr class="row-hold" data-type="hold" data-tag="semi" data-mkt="tw" onclick="toggleDetail('d-3529')">
-  <td><strong>3529</strong><br><span style="font-size:.65rem;color:var(--muted);">力旺</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-semi">eNVM IP</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">約 1,480 元</td>
-  <td class="g" style="font-size:.72rem;">AI 晶片嵌入式記憶體受惠</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:58%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">58</span></div></td>
-  <td><div class="kd-wrap">K=56 D=54<br><span class="kd-signal sig-os">✓ 低檔黃金交叉</span></div></td>
-  <td><span class="act act-hold">持有</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">中</td>
-</tr>
-<tr class="detail-row" id="d-3529"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">業務</div><div class="dv">嵌入式非揮發記憶體IP</div></div>
-    <div class="di"><div class="dk">主要客戶</div><div class="dv">台積電生態系</div></div>
-    <div class="di"><div class="dk">RSI</div><div class="dv" style="color:var(--green);">58 偏多，KD 黃金交叉</div></div>
-    <div class="di"><div class="dk">AI 受惠</div><div class="dv" style="color:var(--green);">AI 晶片大量採用 eNVM</div></div>
-  <div class="di"><div class="dk">外部連結</div><div class="dv" style="display:flex;gap:6px;flex-wrap:wrap;">
-      <a href="https://tw.stock.yahoo.com/quote/2330.TW" target="_blank" style="color:var(--cyan);font-size:.68rem;text-decoration:none;border:1px solid rgba(32,208,232,.3);padding:1px 6px;border-radius:4px;">Yahoo ↗</a>
-      <a href="https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID=2330" target="_blank" style="color:var(--gold);font-size:.68rem;text-decoration:none;border:1px solid rgba(240,192,64,.3);padding:1px 6px;border-radius:4px;">Goodinfo ↗</a>
-    <div class="di"><div class="dk">外部連結</div><div class="dv" style="display:flex;gap:6px;flex-wrap:wrap;">
-      <a href="https://tw.stock.yahoo.com/quote/2886.TW" target="_blank" style="color:var(--cyan);font-size:.68rem;text-decoration:none;border:1px solid rgba(32,208,232,.3);padding:1px 6px;border-radius:4px;">Yahoo ↗</a>
-      <a href="https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID=2886" target="_blank" style="color:var(--gold);font-size:.68rem;text-decoration:none;border:1px solid rgba(240,192,64,.3);padding:1px 6px;border-radius:4px;">Goodinfo ↗</a>
-    </div></div>
-      <div class="di"><div class="dk">外部連結</div><div class="dv" style="display:flex;gap:6px;flex-wrap:wrap;">
-      <a href="https://tw.stock.yahoo.com/quote/2892.TW" target="_blank" style="color:var(--cyan);font-size:.68rem;text-decoration:none;border:1px solid rgba(32,208,232,.3);padding:1px 6px;border-radius:4px;">Yahoo ↗</a>
-      <a href="https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID=2892" target="_blank" style="color:var(--gold);font-size:.68rem;text-decoration:none;border:1px solid rgba(240,192,64,.3);padding:1px 6px;border-radius:4px;">Goodinfo ↗</a>
-    </div></div>
-      </div></div>
-      <div class="di"><div class="dk">外部連結</div><div class="dv" style="display:flex;gap:6px;flex-wrap:wrap;">
-      <a href="https://tw.stock.yahoo.com/quote/2884.TW" target="_blank" style="color:var(--cyan);font-size:.68rem;text-decoration:none;border:1px solid rgba(32,208,232,.3);padding:1px 6px;border-radius:4px;">Yahoo ↗</a>
-      <a href="https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID=2884" target="_blank" style="color:var(--gold);font-size:.68rem;text-decoration:none;border:1px solid rgba(240,192,64,.3);padding:1px 6px;border-radius:4px;">Goodinfo ↗</a>
-    </div></div>
-      </div>
-  <div style="font-size:.72rem;color:var(--muted);margin-top:6px;">📌 力旺 RSI 58、KD 黃金交叉，技術面偏多。AI 晶片採用嵌入式記憶體 IP 增加，中長線利多，持有。</div>
-</div></td></tr>
-
-<tr class="row-hold" data-type="hold" data-tag="game" data-mkt="tw" onclick="toggleDetail('d-3546')">
-  <td><strong>3546</strong><br><span style="font-size:.65rem;color:var(--muted);">宇峻</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-game">遊戲軟體</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">69.80 元</td>
-  <td style="color:var(--muted);font-size:.72rem;">+0.43%（3/20）</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:50%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">50</span></div></td>
-  <td><div class="kd-wrap">K=48 D=50<br><span class="kd-signal sig-n">◆ 中性</span></div></td>
-  <td><span class="act act-watch">觀察</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">中</td>
-</tr>
-<tr class="detail-row" id="d-3546"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">業務</div><div class="dv">線上遊戲開發</div></div>
-    <div class="di"><div class="dk">RSI</div><div class="dv">50 中性，無強訊號</div></div>
-    <div class="di"><div class="dk">注意</div><div class="dv" style="color:var(--gold);">非主流熱門族群</div></div>
-  <div class="di"><div class="dk">外部連結</div><div class="dv" style="display:flex;gap:6px;flex-wrap:wrap;">
-      <a href="https://tw.stock.yahoo.com/quote/3546.TW" target="_blank" style="color:var(--cyan);font-size:.68rem;text-decoration:none;border:1px solid rgba(32,208,232,.3);padding:1px 6px;border-radius:4px;">Yahoo ↗</a>
-      <a href="https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID=3546" target="_blank" style="color:var(--gold);font-size:.68rem;text-decoration:none;border:1px solid rgba(240,192,64,.3);padding:1px 6px;border-radius:4px;">Goodinfo ↗</a>
-    </div></div>
-      </div>
-  <div style="font-size:.72rem;color:var(--muted);margin-top:6px;">📌 宇峻屬遊戲股，目前非市場資金追逐主軸（主軸在 AI/記憶體）。RSI 50 中性，無明確訊號，觀察為主。</div>
-</div></td></tr>
-
-<tr class="row-hold" data-type="hold" data-tag="semi" data-mkt="tw" onclick="toggleDetail('d-5274')">
-  <td><strong>5274</strong><br><span style="font-size:.65rem;color:var(--muted);">信驊</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-semi">BMC IC</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">11,750 元</td>
-  <td class="r" style="font-size:.72rem;">▼ -2.49%（3/20）</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:56%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">56</span></div></td>
-  <td><div class="kd-wrap">K=52 D=55<br><span class="kd-signal sig-n">◆ 中性整理</span></div></td>
-  <td><span class="act act-hold">持有</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">中</td>
-</tr>
-<tr class="detail-row" id="d-5274"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">業務</div><div class="dv">伺服器 BMC 晶片</div></div>
-    <div class="di"><div class="dk">股價</div><div class="dv" style="color:var(--gold);">11,750 元（超高價股）</div></div>
-    <div class="di"><div class="dk">AI 受惠</div><div class="dv" style="color:var(--green);">AI 伺服器 BMC 標配</div></div>
-    <div class="di"><div class="dk">RSI</div><div class="dv">56 中性，3/20 小跌</div></div>
-  <div class="di"><div class="dk">外部連結</div><div class="dv" style="display:flex;gap:6px;flex-wrap:wrap;">
-      <a href="https://tw.stock.yahoo.com/quote/5274.TW" target="_blank" style="color:var(--cyan);font-size:.68rem;text-decoration:none;border:1px solid rgba(32,208,232,.3);padding:1px 6px;border-radius:4px;">Yahoo ↗</a>
-      <a href="https://goodinfo.tw/tw/StockDetail.asp?STOCK_ID=5274" target="_blank" style="color:var(--gold);font-size:.68rem;text-decoration:none;border:1px solid rgba(240,192,64,.3);padding:1px 6px;border-radius:4px;">Goodinfo ↗</a>
-    </div></div>
-      </div>
-  <div style="font-size:.72rem;color:var(--muted);margin-top:6px;">📌 信驊為 AI 伺服器 BMC 晶片龍頭，中長線受 AI 基礎設施建設直接受惠。RSI 56 正常整理，股價甚高需零股交易，持有。</div>
-</div></td></tr>
-
-<!-- ════ 新增推薦（台股） ════ -->
-<tr class="row-new" data-type="new" data-tag="mem" data-mkt="tw" onclick="toggleDetail('d-2337')">
-  <td><strong>2337 🆕</strong><br><span style="font-size:.65rem;color:var(--green);">旺宏電子 ← 推薦新增</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-mem">記憶體</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">157.00 元</td>
-  <td class="g" style="font-size:.72rem;">▲ +9.4%（3/19）⚠處置股</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill rsi-ob" style="width:87%;background:linear-gradient(90deg,var(--gold) 50%,var(--red));"></div></div><span class="rsi-val rsi-ob">87<span style="font-size:.52rem;color:var(--muted);margin-left:2px;">3/20</span></span></div></td>
-  <td><div class="kd-wrap">K=92 D=88<br><span class="kd-signal sig-ob">⚠ 嚴重超買</span></div></td>
-  <td><span class="act act-caution">謹慎小買</span></td>
-  <td style="color:var(--red);font-size:.72rem;">高⚠</td>
-</tr>
-<tr class="detail-row" id="d-2337"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">大摩評級</div><div class="dv" style="color:var(--green);">大中華半導體首選</div></div>
-    <div class="di"><div class="dk">凱基目標價</div><div class="dv" style="color:var(--gold);">300 元</div></div>
-    <div class="di"><div class="dk">處置股</div><div class="dv" style="color:var(--red);">3/19–4/1 ⚠</div></div>
-    <div class="di"><div class="dk">RSI</div><div class="dv" style="color:var(--red);">87 嚴重超買</div></div>
-    <div class="di"><div class="dk">停損位</div><div class="dv" style="color:var(--red);">130.5 元</div></div>
-  </div>
-  <div class="sim-log">
-    <div class="sim-log-hd"><span>日期</span><span>參考價</span><span>損益</span><span>報酬率</span><span>訊號</span></div>
-    <div class="sim-row"><span class="dt">3/21</span><span>157.00</span><span class="y">0</span><span class="y">0.00%</span><span><span class="badge-buy">NT$5,000 買入</span></span></div>
-    <div class="sim-row" style="opacity:.5;"><span class="dt">3/28</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">追蹤中</span></span></div>
-    <div class="sim-row" style="opacity:.35;"><span class="dt">4/4</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">追蹤中</span></span></div>
-  </div>
-  <div style="font-size:.68rem;color:var(--red);margin-top:6px;">⚠ RSI 87 + 列處置股，風險極高。若決定進場僅建議小部位（NT$5,000 買 31 股零股），嚴設停損 130.5 元。目標 300 元潛在 +91%，但風險不對稱。</div>
-</div></td></tr>
-
-<tr class="row-new" data-type="new" data-tag="mfg" data-mkt="tw" onclick="toggleDetail('d-2615')">
-  <td><strong>2615 🆕</strong><br><span style="font-size:.65rem;color:var(--green);">萬海航運 ← 推薦新增</span></td>
-  <td><span class="mkt mkt-tw">台股</span></td>
-  <td><span class="tag tag-mfg">航運</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">88.00 元</td>
-  <td class="g" style="font-size:.72rem;">外資買超 3.4萬張 #1</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill rsi-os" style="width:42%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-os">42<span style="font-size:.52rem;color:var(--muted);margin-left:2px;">3/20</span></span></div></td>
-  <td><div class="kd-wrap">K=38 D=35<br><span class="kd-signal sig-os">✓ 低檔黃金交叉</span></div></td>
-  <td><span class="act act-buy">買入</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">中</td>
-</tr>
-<tr class="detail-row" id="d-2615"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">外資買超（3/20）</div><div class="dv" style="color:var(--green);">34,462 張 全市場第一</div></div>
-    <div class="di"><div class="dk">RSI</div><div class="dv" style="color:var(--green);">42 + KD 黃金交叉</div></div>
-    <div class="di"><div class="dk">催化</div><div class="dv">中東運費、資金輪動</div></div>
-    <div class="di"><div class="dk">停損</div><div class="dv" style="color:var(--red);">80 元</div></div>
-    <div class="di"><div class="dk">目標</div><div class="dv" style="color:var(--green);">105 元（+19.3%）</div></div>
-  </div>
-  <div class="sim-log">
-    <div class="sim-log-hd"><span>日期</span><span>參考價</span><span>損益</span><span>報酬率</span><span>訊號</span></div>
-    <div class="sim-row"><span class="dt">3/21</span><span>88.00</span><span class="y">0</span><span class="y">0.00%</span><span><span class="badge-buy">NT$5,000 買入</span></span></div>
-    <div class="sim-row" style="opacity:.5;"><span class="dt">3/28</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">追蹤中</span></span></div>
-    <div class="sim-row" style="opacity:.35;"><span class="dt">4/4</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">追蹤中</span></span></div>
-  </div>
-  <div style="font-size:.68rem;color:var(--muted);margin-top:6px;">📌 五檔推薦中技術面最佳（低檔 KD 黃金交叉 + 外資買超雙重確認）。NT$5,000 可買 56 股零股，停損 80 元，目標 105 元。</div>
-</div></td></tr>
-
-<!-- ════ 新增推薦（美股） ════ -->
-<tr class="row-new" data-type="new" data-tag="mem" data-mkt="us" onclick="toggleDetail('d-MU')">
-  <td><strong>MU 🆕</strong><br><span style="font-size:.65rem;color:var(--green);">Micron ← 推薦新增</span></td>
-  <td><span class="mkt mkt-us">美股</span></td>
-  <td><span class="tag tag-mem">HBM4記憶體</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">$422.90</td>
-  <td class="r" style="font-size:.72rem;">▼ 財報後 -7% 修正</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:51%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">51</span></div></td>
-  <td><div class="kd-wrap">%K=45 %D=50<br><span class="kd-signal sig-n">◆ 中性整理</span></div></td>
-  <td><span class="act act-add">分批買</span></td>
-  <td style="color:var(--orange);font-size:.72rem;">中高</td>
-</tr>
-<tr class="detail-row" id="d-MU"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">Q2 EPS</div><div class="dv" style="color:var(--green);">$12.20（+42%超預期）</div></div>
-    <div class="di"><div class="dk">DB目標</div><div class="dv" style="color:var(--green);">$550</div></div>
-    <div class="di"><div class="dk">停損</div><div class="dv" style="color:var(--red);">$412</div></div>
-    <div class="di"><div class="dk">RSI</div><div class="dv">51 中性整理</div></div>
-  </div>
-  <div class="sim-log">
-    <div class="sim-log-hd"><span>日期</span><span>USD價</span><span>損益(NT)</span><span>報酬率</span><span>訊號</span></div>
-    <div class="sim-row"><span class="dt">3/21</span><span>$422.90</span><span class="y">0</span><span class="y">0.00%</span><span><span class="badge-buy">NT$5,000 買入</span></span></div>
-    <div class="sim-row" style="opacity:.5;"><span class="dt">3/28</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">追蹤中</span></span></div>
-    <div class="sim-row" style="opacity:.4;"><span class="dt">7/1</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">下次財報</span></span></div>
-  </div>
-  <div style="font-size:.68rem;color:var(--muted);margin-top:6px;">📌 NT$5,000 ≈ USD 155.7，可買 0.35 股（需零股功能）。停損 $412，目標 $550（+23.9%）。</div>
-</div></td></tr>
-
-<tr class="row-new" data-type="new" data-tag="mfg" data-mkt="us" onclick="toggleDetail('d-CAT')">
-  <td><strong>CAT 🆕</strong><br><span style="font-size:.65rem;color:var(--green);">Caterpillar ← 推薦新增</span></td>
-  <td><span class="mkt mkt-us">美股</span></td>
-  <td><span class="tag tag-mfg">重工×AI</span></td>
-  <td style="font-family:'IBM Plex Mono',monospace;">$693.62</td>
-  <td class="g" style="font-size:.72rem;">年初 +30%，道指貢獻#1</td>
-  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill rsi-os" style="width:30%;background:var(--green);"></div></div><span class="rsi-val rsi-os">30<span style="font-size:.52rem;color:var(--muted);margin-left:2px;">3/20</span></span></div></td>
-  <td><div class="kd-wrap">%K=22 %D=25<br><span class="kd-signal sig-os">✓ 超賣反彈訊號</span></div></td>
-  <td><span class="act act-buy">買入</span></td>
-  <td style="color:var(--gold);font-size:.72rem;">中</td>
-</tr>
-<tr class="detail-row" id="d-CAT"><td colspan="9"><div class="detail-inner">
-  <div class="detail-grid">
-    <div class="di"><div class="dk">RSI</div><div class="dv" style="color:var(--green);">30 超賣邊緣 最強訊號</div></div>
-    <div class="di"><div class="dk">KD</div><div class="dv" style="color:var(--green);">%K=22 低檔近黃金交叉</div></div>
-    <div class="di"><div class="dk">AI合作</div><div class="dv">Nvidia Omniverse</div></div>
-    <div class="di"><div class="dk">停損</div><div class="dv" style="color:var(--red);">$662</div></div>
-    <div class="di"><div class="dk">法說會</div><div class="dv" style="color:var(--gold);">4/29</div></div>
-  </div>
-  <div class="sim-log">
-    <div class="sim-log-hd"><span>日期</span><span>USD價</span><span>損益(NT)</span><span>報酬率</span><span>訊號</span></div>
-    <div class="sim-row"><span class="dt">3/21</span><span>$693.62</span><span class="y">0</span><span class="y">0.00%</span><span><span class="badge-buy">NT$5,000 買入</span></span></div>
-    <div class="sim-row" style="opacity:.5;"><span class="dt">3/28</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">追蹤中</span></span></div>
-    <div class="sim-row" style="opacity:.4;"><span class="dt">4/29</span><span>—</span><span>—</span><span>—</span><span><span class="badge-trk">法說催化</span></span></div>
-  </div>
-  <div style="font-size:.68rem;color:var(--muted);margin-top:6px;">📌 五檔推薦中 RSI 最低（30），技術面反彈訊號最強。NT$5,000 ≈ USD 155.7，可買 0.23 股。停損 $662（-2.8%），目標 $736（+8.1%）。4/29 法說催化。</div>
-</div></td></tr>
-
-</tbody>
-</table>
-
-<div class="disc">
-  <strong>⚠ 免責聲明</strong>：RSI、KD 數值依公開技術分析來源推估（Yahoo股市、鉅亨網、Investing.com、TipRanks），並非即時串流數據。NT$5,000 模擬為教育與追蹤用途，並非投資建議。持倉資訊來自您上傳的截圖，實際持倉數量與成本請以您的券商帳戶為準。投資有風險，請自行評估並諮詢持牌金融顧問。
-</div>
-
-</div><!-- /wrap -->
-
-<!-- ══════════════════════════════════════════
-     自選股浮動按鈕 + Modal
-══════════════════════════════════════════ -->
-
-<!-- 浮動新增按鈕 -->
-<button id="fabBtn" onclick="openModal()" title="新增自選股">＋</button>
-
-<!-- Modal 遮罩 -->
-<div id="modalOverlay" onclick="closeModal()"></div>
-
-<!-- Modal 主體 -->
-<div id="stockModal">
-  <div class="modal-header">
-    <span class="modal-title">📋 自選股管理</span>
-    <button class="modal-close" onclick="closeModal()">✕</button>
-  </div>
-
-  <!-- 新增表單 -->
-  <div class="modal-section">
-    <div class="modal-sec-label">新增股票</div>
-    <div class="add-form">
-      <div class="form-row">
-        <div class="form-group">
-          <label>代碼 <span class="req">*</span></label>
-          <input id="f-ticker" placeholder="例：2454 或 NVDA" maxlength="12">
-        </div>
-        <div class="form-group">
-          <label>名稱 <span class="req">*</span></label>
-          <input id="f-name" placeholder="例：聯發科">
-        </div>
-        <div class="form-group">
-          <label>市場 <span class="req">*</span></label>
-          <select id="f-mkt">
-            <option value="tw">🇹🇼 台股</option>
-            <option value="us">🇺🇸 美股</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>類別</label>
-          <select id="f-tag">
-            <option value="semi">半導體</option>
-            <option value="mem">記憶體</option>
-            <option value="ai">AI零組件</option>
-            <option value="mfg">傳產製造</option>
-            <option value="fin">金融</option>
-            <option value="etf">ETF</option>
-            <option value="game">遊戲軟體</option>
-            <option value="other">其他</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>買入價 <span class="req">*</span></label>
-          <input id="f-entry" type="number" step="0.01" placeholder="例：1840">
-        </div>
-        <div class="form-group">
-          <label>持股數（零股）</label>
-          <input id="f-shares" type="number" step="1" placeholder="例：2">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>停損價</label>
-          <input id="f-stop" type="number" step="0.01" placeholder="選填">
-        </div>
-        <div class="form-group">
-          <label>目標價</label>
-          <input id="f-target" type="number" step="0.01" placeholder="選填">
-        </div>
-        <div class="form-group">
-          <label>備註</label>
-          <input id="f-note" placeholder="選填">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>📅 購入日期 <span class="req">*</span></label>
-          <input id="f-buydate" type="date">
-        </div>
-        <div class="form-group">
-          <label>📅 出售日期 <span style="font-size:.58rem;color:var(--muted);">（尚未出售可留空）</span></label>
-          <input id="f-selldate" type="date">
-        </div>
-        <div class="form-group">
-          <label>出售價格 <span style="font-size:.58rem;color:var(--muted);">（出售後填入）</span></label>
-          <input id="f-sellprice" type="number" step="0.01" placeholder="選填">
-        </div>
-      </div>
-      <div id="formError" class="form-error"></div>
-      <button class="btn-add" onclick="addStock()">＋ 加入自選股</button>
-    </div>
-  </div>
-
-  <!-- 自選股清單 -->
-  <div class="modal-section">
-    <div class="modal-sec-label">自選股清單 <span id="watchCount" class="watch-count">0</span></div>
-    <div id="watchList" class="watch-list">
-      <div class="watch-empty" id="watchEmpty">尚未新增任何自選股</div>
-    </div>
-  </div>
-
-  <div class="modal-footer">
-    <button class="btn-export" onclick="exportCSV()">⬇ 匯出 CSV</button>
-    <button class="btn-clear" onclick="clearAll()">🗑 清除全部</button>
-  </div>
-</div>
-
-<!-- 自選股資料列注入區（動態產生） -->
-<style>
-/* ── FAB ── */
+/* 自選股列 */
+.row-watch td{background:#1a1228;}
+.row-watch td:first-child{border-left:3px solid rgba(160,112,240,.55);}
+/* FAB */
 #fabBtn{
   position:fixed;bottom:28px;right:24px;z-index:900;
   width:52px;height:52px;border-radius:50%;border:none;
@@ -909,15 +221,11 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
   transition:transform .2s,box-shadow .2s;
 }
 #fabBtn:hover{transform:scale(1.1);box-shadow:0 10px 32px rgba(240,192,64,.55);}
-
-/* ── OVERLAY ── */
 #modalOverlay{
   display:none;position:fixed;inset:0;z-index:910;
   background:rgba(0,0,0,.65);backdrop-filter:blur(3px);
 }
 #modalOverlay.show{display:block;}
-
-/* ── MODAL ── */
 #stockModal{
   display:none;position:fixed;z-index:920;
   top:50%;left:50%;transform:translate(-50%,-50%) scale(.95);
@@ -928,31 +236,21 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
   transition:transform .22s,opacity .22s;opacity:0;
 }
 #stockModal.show{display:block;transform:translate(-50%,-50%) scale(1);opacity:1;}
-
 .modal-header{
   display:flex;align-items:center;justify-content:space-between;
   padding:16px 20px;border-bottom:1px solid var(--border);
   position:sticky;top:0;background:var(--card2);z-index:1;
 }
 .modal-title{font-size:.95rem;font-weight:700;color:var(--gold);}
-.modal-close{
-  background:none;border:none;color:var(--muted);font-size:1rem;
-  cursor:pointer;padding:4px 8px;border-radius:5px;transition:all .15s;
-}
+.modal-close{background:none;border:none;color:var(--muted);font-size:1rem;
+  cursor:pointer;padding:4px 8px;border-radius:5px;transition:all .15s;}
 .modal-close:hover{background:rgba(255,255,255,.06);color:var(--text);}
-
 .modal-section{padding:16px 20px;border-bottom:1px solid var(--border);}
-.modal-sec-label{
-  font-size:.6rem;color:var(--muted);letter-spacing:.1em;
-  text-transform:uppercase;margin-bottom:12px;
-}
-.watch-count{
-  display:inline-block;padding:1px 7px;border-radius:8px;font-size:.6rem;
+.modal-sec-label{font-size:.6rem;color:var(--muted);letter-spacing:.1em;
+  text-transform:uppercase;margin-bottom:12px;}
+.watch-count{display:inline-block;padding:1px 7px;border-radius:8px;font-size:.6rem;
   background:rgba(240,192,64,.12);color:var(--gold);
-  border:1px solid rgba(240,192,64,.25);margin-left:6px;
-}
-
-/* FORM */
+  border:1px solid rgba(240,192,64,.25);margin-left:6px;}
 .add-form{display:flex;flex-direction:column;gap:10px;}
 .form-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
 .form-group{display:flex;flex-direction:column;gap:4px;}
@@ -964,84 +262,561 @@ header{display:flex;align-items:flex-end;justify-content:space-between;
   color:var(--text);font-family:'IBM Plex Sans TC',sans-serif;
   transition:border-color .15s;outline:none;
 }
-.form-group input[type=date]{
-  color-scheme:dark;
-  font-family:'IBM Plex Mono',monospace;
-}
+.form-group input[type=date]{color-scheme:dark;font-family:'IBM Plex Mono',monospace;}
 .form-group input:focus,.form-group select:focus{border-color:var(--gold);}
 .form-group select option{background:var(--card2);}
 .form-error{font-size:.7rem;color:var(--red);min-height:16px;}
-.btn-add{
-  align-self:flex-start;padding:8px 20px;border-radius:7px;border:none;
+.btn-add{align-self:flex-start;padding:8px 20px;border-radius:7px;border:none;
   background:linear-gradient(135deg,var(--gold),#c89020);
   color:#07090f;font-size:.8rem;font-weight:700;cursor:pointer;
-  transition:transform .15s,box-shadow .15s;
-}
+  transition:transform .15s,box-shadow .15s;}
 .btn-add:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(240,192,64,.3);}
-
-/* WATCH LIST */
 .watch-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;}
 .watch-empty{font-size:.76rem;color:var(--muted);text-align:center;padding:24px 0;}
-.watch-item{
-  display:grid;grid-template-columns:1fr auto auto auto auto auto auto;
+.watch-item{display:grid;grid-template-columns:1fr auto auto auto auto auto auto;
   align-items:center;gap:8px;
   background:var(--surface);border:1px solid var(--border);
-  border-radius:8px;padding:9px 12px;font-size:.74rem;
-}
+  border-radius:8px;padding:9px 12px;font-size:.74rem;}
 .wi-name{font-weight:600;}
 .wi-ticker{font-family:'IBM Plex Mono',monospace;font-size:.68rem;color:var(--muted);}
 .wi-price{font-family:'IBM Plex Mono',monospace;font-size:.72rem;}
-.wi-pct{font-family:'IBM Plex Mono',monospace;font-size:.72rem;font-weight:600;}
 .wi-stop{font-size:.65rem;color:var(--red);}
 .wi-note{font-size:.65rem;color:var(--muted);max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.wi-del{
-  background:rgba(240,48,96,.1);border:1px solid rgba(240,48,96,.25);
+.wi-del{background:rgba(240,48,96,.1);border:1px solid rgba(240,48,96,.25);
   color:var(--red);border-radius:5px;padding:2px 8px;font-size:.65rem;
-  cursor:pointer;transition:all .15s;white-space:nowrap;
-}
+  cursor:pointer;transition:all .15s;white-space:nowrap;}
 .wi-del:hover{background:rgba(240,48,96,.2);}
-
-/* FOOTER */
-.modal-footer{
-  display:flex;gap:10px;justify-content:flex-end;
-  padding:14px 20px;
-}
-.btn-export{
-  padding:6px 16px;border-radius:6px;border:1px solid var(--border2);
-  background:var(--surface);color:var(--text);font-size:.74rem;cursor:pointer;
-  transition:all .15s;
-}
+.modal-footer{display:flex;gap:10px;justify-content:flex-end;padding:14px 20px;}
+.btn-export{padding:6px 16px;border-radius:6px;border:1px solid var(--border2);
+  background:var(--surface);color:var(--text);font-size:.74rem;cursor:pointer;transition:all .15s;}
 .btn-export:hover{border-color:var(--green);color:var(--green);}
-.btn-clear{
-  padding:6px 16px;border-radius:6px;border:1px solid rgba(240,48,96,.25);
-  background:rgba(240,48,96,.06);color:var(--red);font-size:.74rem;cursor:pointer;
-  transition:all .15s;
-}
+.btn-clear{padding:6px 16px;border-radius:6px;border:1px solid rgba(240,48,96,.25);
+  background:rgba(240,48,96,.06);color:var(--red);font-size:.74rem;cursor:pointer;transition:all .15s;}
 .btn-clear:hover{background:rgba(240,48,96,.15);}
-
-/* 自選股注入到主表格的列樣式 */
-.row-watch td{background:#1a1228;}
-.row-watch td:first-child{border-left:3px solid rgba(160,112,240,.55);}
-
 @media(max-width:520px){
   .form-row{grid-template-columns:1fr 1fr;}
   .watch-item{grid-template-columns:1fr auto auto;}
   .wi-stop,.wi-note,.wi-price{display:none;}
 }
 </style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <div class="h-title">📊 投資組合全覽雷達</div>
+    <div class="h-sub">持倉清單 × 本週/當月推薦 × RSI/KD × NT$5,000 模擬追蹤 · 股價以最後收盤日（更新中）為準</div>
+  </div>
+  <div class="h-right">
+    <span class="bdg bdg-date" id="hdr-date">— / — / —</span>
+    <span class="bdg bdg-hold">📁 持倉 11 檔</span>
+    <span class="bdg bdg-new">🎯 推薦 4 檔</span>
+    <div class="theme-bar">
+      <span style="font-size:.58rem;color:var(--muted);">主題</span>
+      <button class="tbtn ton" id="t-dark"     onclick="setTheme('dark',this)">暗色</button>
+      <button class="tbtn"     id="t-light"    onclick="setTheme('light',this)">亮色</button>
+      <button class="tbtn"     id="t-contrast" onclick="setTheme('contrast',this)">高對比</button>
+    </div>
+    <a href="dca_tracker.html"
+       style="padding:4px 11px;border-radius:5px;font-size:.62rem;
+              font-family:'IBM Plex Mono',monospace;border:1px solid;
+              border-color:rgba(32,208,232,.3);color:var(--cyan,#20d0e8);
+              background:rgba(32,208,232,.05);text-decoration:none;transition:background .15s;"
+       onmouseover="this.style.background='rgba(32,208,232,.12)'"
+       onmouseout="this.style.background='rgba(32,208,232,.05)'">📅 定期定額</a>
+  </div>
+</header>
+
+<div class="legend">
+  <div class="leg-item"><div class="leg-dot ld-hold"></div>現有持股</div>
+  <div class="leg-item"><div class="leg-dot ld-new"></div>近三日推薦買入（5 檔）</div>
+  <div class="leg-item"><div class="leg-dot ld-tw"></div>台股</div>
+  <div class="leg-item"><div class="leg-dot ld-us"></div>美股</div>
+  <div class="leg-item" style="margin-left:auto;font-size:.65rem;color:var(--gold);">💡 點擊任一列展開 RSI/KD 詳情與模擬追蹤</div>
+</div>
+
+<!-- ════ 指數卡片區塊（v3.1：動態從 data.json 讀取）════ -->
+<div class="index-strip">
+  <div class="index-card" id="card-TWII">
+    <div class="idx-label">加權指數</div>
+    <div class="idx-price idx-loading" id="idx-TWII-price">讀取中...</div>
+    <div class="idx-change" id="idx-TWII-change">—</div>
+    <div class="idx-time"  id="idx-TWII-time">—</div>
+  </div>
+  <div class="index-card" id="card-DJI">
+    <div class="idx-label">道瓊工業</div>
+    <div class="idx-price idx-loading" id="idx-DJI-price">讀取中...</div>
+    <div class="idx-change" id="idx-DJI-change">—</div>
+    <div class="idx-time"  id="idx-DJI-time">—</div>
+  </div>
+  <div class="index-card" id="card-GSPC">
+    <div class="idx-label">S&amp;P 500</div>
+    <div class="idx-price idx-loading" id="idx-GSPC-price">讀取中...</div>
+    <div class="idx-change" id="idx-GSPC-change">—</div>
+    <div class="idx-time"  id="idx-GSPC-time">—</div>
+  </div>
+</div>
+
+<!-- SUMMARY -->
+<div class="summary" style="margin-top:12px;">
+  <div class="sc-sum"><div class="sl">總標的數</div><div class="sv y">11 檔</div></div>
+  <div class="sc-sum"><div class="sl">台股持股</div><div class="sv">11 檔</div></div>
+  <div class="sc-sum"><div class="sl">新增推薦</div><div class="sv g">4 檔</div></div>
+  <div class="sc-sum"><div class="sl">最強技術訊號</div><div class="sv g">CAT RSI=30</div></div>
+  <div class="sc-sum"><div class="sl">最高風險</div><div class="sv r">旺宏 RSI=87</div></div>
+  <div class="sc-sum">
+    <div class="sl">加權指數</div>
+    <div class="sv r" id="sum-TWII-price">—</div>
+    <div class="st" id="sum-TWII-change">更新中...</div>
+  </div>
+  <div class="sc-sum">
+    <div class="sl">道瓊工業</div>
+    <div class="sv r" id="sum-DJI-price">—</div>
+    <div class="st" id="sum-DJI-change">更新中...</div>
+  </div>
+  <div class="sc-sum">
+    <div class="sl">S&amp;P 500</div>
+    <div class="sv r" id="sum-GSPC-price">—</div>
+    <div class="st" id="sum-GSPC-change">更新中...</div>
+  </div>
+</div>
+
+<!-- FILTER -->
+<div class="frow">
+  <button class="fb on" onclick="filterRows('all',this)">全部</button>
+  <button class="fb" onclick="filterRows('hold',this)">📁 持倉</button>
+  <button class="fb" onclick="filterRows('new',this)">🎯 推薦新增</button>
+  <button class="fb" onclick="filterRows('tw',this)">🇹🇼 台股</button>
+  <button class="fb" onclick="filterRows('us',this)">🇺🇸 美股</button>
+  <button class="fb" onclick="filterRows('etf',this)">ETF</button>
+  <button class="fb" onclick="filterRows('fin',this)">金融</button>
+  <button class="fb" onclick="filterRows('semi',this)">半導體</button>
+  <button class="fb" onclick="filterRows('mfg',this)">傳產</button>
+</div>
+<p class="click-hint">👆 點擊任一列可展開 <span>RSI/KD 視覺化</span> 與 <span>NT$5,000 模擬追蹤</span></p>
+
+<!-- ═══════ MASTER TABLE ═══════ -->
+<table class="master-table" id="mainTable">
+<thead>
+  <tr>
+    <th>代碼 / 名稱</th><th>市場</th><th>類別</th><th>參考價</th>
+    <th>近三日</th><th>RSI(14)</th><th>KD 訊號</th><th>操作建議</th><th>風險</th>
+  </tr>
+</thead>
+<tbody id="tableBody">
+<!-- 0050 -->
+<tr class="row-hold" data-type="hold" data-tag="etf" data-mkt="tw" onclick="toggleDetail('d-0050')">
+  <td><strong>0050</strong><br><span style="font-size:.65rem;color:var(--muted);">元大台灣50</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-etf">市值ETF</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">73.00 元</td>
+  <td class="g" style="font-size:.72rem;">台積電秒填息帶動上揚</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill rsi-n" style="width:55%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">55</span></div></td>
+  <td><div class="kd-wrap">K=52 D=50<br><span class="kd-signal sig-n">◆ 中性偏多</span></div></td>
+  <td><span class="act act-hold">定期定額</span></td><td style="color:var(--gold);font-size:.72rem;">低</td>
+</tr>
+<tr class="detail-row" id="d-0050"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">追蹤指數</div><div class="dv">台灣前50大市值</div></div>
+    <div class="di"><div class="dk">台積電佔比</div><div class="dv" style="color:var(--gold);">~62%</div></div>
+    <div class="di"><div class="dk">配息頻率</div><div class="dv">半年（1月/7月）</div></div>
+    <div class="di"><div class="dk">RSI(14)</div><div class="dv" style="color:var(--gold);">55 — 中性偏多</div></div>
+    <div class="di"><div class="dk">K值 / D值</div><div class="dv">K=52 / D=50（黃金交叉）</div></div>
+  </div>
+  <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">📌 RSI 55 中性偏多，KD 黃金交叉，定期定額無需調整節奏。</div>
+</div></td></tr>
+<!-- 0056 -->
+<tr class="row-hold" data-type="hold" data-tag="etf" data-mkt="tw" onclick="toggleDetail('d-0056')">
+  <td><strong>0056</strong><br><span style="font-size:.65rem;color:var(--muted);">元大高股息</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-etf">高股息ETF</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">38.77 元</td>
+  <td style="color:var(--muted);font-size:.72rem;">橫盤整理（0.00%）</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill rsi-n" style="width:48%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">48</span></div></td>
+  <td><div class="kd-wrap">K=44 D=47<br><span class="kd-signal sig-n">◆ 中性偏空</span></div></td>
+  <td><span class="act act-hold">持有收息</span></td><td style="color:var(--gold);font-size:.72rem;">低</td>
+</tr>
+<tr class="detail-row" id="d-0056"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">配息頻率</div><div class="dv">季配（1/4/7/10月）</div></div>
+    <div class="di"><div class="dk">近期殖利率</div><div class="dv" style="color:var(--gold);">約 6–8%</div></div>
+    <div class="di"><div class="dk">RSI(14)</div><div class="dv" style="color:var(--gold);">48 — 中性偏弱</div></div>
+    <div class="di"><div class="dk">K值 / D值</div><div class="dv">K=44 / D=47（死叉）</div></div>
+  </div>
+  <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">📌 以收息為主策略，科技牛市期間不需加碼。</div>
+</div></td></tr>
+<!-- 00878 -->
+<tr class="row-hold" data-type="hold" data-tag="etf" data-mkt="tw" onclick="toggleDetail('d-00878')">
+  <td><strong>00878</strong><br><span style="font-size:.65rem;color:var(--muted);">國泰永續高股息</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-etf">高股息ETF</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">22.47 元</td>
+  <td style="color:var(--muted);font-size:.72rem;">橫盤整理（-0.09%）</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill rsi-n" style="width:46%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">46</span></div></td>
+  <td><div class="kd-wrap">K=42 D=45<br><span class="kd-signal sig-n">◆ 中性偏空</span></div></td>
+  <td><span class="act act-hold">持有收息</span></td><td style="color:var(--gold);font-size:.72rem;">低</td>
+</tr>
+<tr class="detail-row" id="d-00878"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">配息頻率</div><div class="dv">季配（2/5/8/11月）</div></div>
+    <div class="di"><div class="dk">近期殖利率</div><div class="dv" style="color:var(--gold);">約 6–7%</div></div>
+    <div class="di"><div class="dk">RSI(14)</div><div class="dv" style="color:var(--gold);">46 — 三 ETF 中最弱</div></div>
+  </div>
+  <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">📌 配息月份與 0056 錯開，搭配可達每季穩定收息效果。</div>
+</div></td></tr>
+<!-- 2308 -->
+<tr class="row-hold" data-type="hold" data-tag="semi" data-mkt="tw" onclick="toggleDetail('d-2308')">
+  <td><strong>2308</strong><br><span style="font-size:.65rem;color:var(--muted);">台達電</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-semi">AI 電源</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">1,455 元</td>
+  <td class="g" style="font-size:.72rem;">▲ 台股第2權值股</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:62%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">62</span></div></td>
+  <td><div class="kd-wrap">K=60 D=58<br><span class="kd-signal sig-n">◆ 中性偏多</span></div></td>
+  <td><span class="act act-hold">持有</span></td><td style="color:var(--gold);font-size:.72rem;">低中</td>
+</tr>
+<tr class="detail-row" id="d-2308"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">核心產品</div><div class="dv">AI伺服器電源供應器</div></div>
+    <div class="di"><div class="dk">52週漲幅</div><div class="dv" style="color:var(--green);">+200% 以上</div></div>
+    <div class="di"><div class="dk">RSI趨勢</div><div class="dv">62 中性偏多，健康</div></div>
+  </div>
+  <div style="font-size:.72rem;color:var(--muted);margin-top:6px;">📌 RSI 62 + KD 黃金交叉，仍具多頭動能，持有觀點不變。</div>
+</div></td></tr>
+<!-- 2330 -->
+<tr class="row-hold" data-type="hold" data-tag="semi" data-mkt="tw" onclick="toggleDetail('d-2330')">
+  <td><strong>2330 ★</strong><br><span style="font-size:.65rem;color:var(--green);">台積電 ← 推薦加碼</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-semi">半導體</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">1,840 元</td>
+  <td class="r" style="font-size:.72rem;">▼ -2.9% 回調中</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:52%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">52</span></div></td>
+  <td><div class="kd-wrap">K=48 D=52<br><span class="kd-signal sig-n">◆ 短線死叉整理</span></div></td>
+  <td><span class="act act-add">加碼</span></td><td style="color:var(--gold);font-size:.72rem;">中</td>
+</tr>
+<tr class="detail-row" id="d-2330"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">3/17 秒填息</div><div class="dv" style="color:var(--green);">1,875 元創新高</div></div>
+    <div class="di"><div class="dk">外資目標</div><div class="dv">2,400–3,000 元</div></div>
+    <div class="di"><div class="dk">停損建議</div><div class="dv" style="color:var(--red);">1,720 元</div></div>
+  </div>
+  <div style="font-size:.68rem;color:var(--muted);margin-top:6px;">📌 NT$5,000 可買約 2 股（零股），停損 1,720 元，目標 2,400 元。</div>
+</div></td></tr>
+<!-- 2884 -->
+<tr class="row-hold" data-type="hold" data-tag="fin" data-mkt="tw" onclick="toggleDetail('d-2884')">
+  <td><strong>2884</strong><br><span style="font-size:.65rem;color:var(--muted);">玉山金</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-fin">金控</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">33.35 元</td>
+  <td style="color:var(--muted);font-size:.72rem;">橫盤</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:44%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">44</span></div></td>
+  <td><div class="kd-wrap">K=40 D=43<br><span class="kd-signal sig-n">◆ 中性偏空</span></div></td>
+  <td><span class="act act-hold">持有收息</span></td><td style="color:var(--gold);font-size:.72rem;">低</td>
+</tr>
+<tr class="detail-row" id="d-2884"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">配息頻率</div><div class="dv">年配（7月）</div></div>
+    <div class="di"><div class="dk">近期殖利率</div><div class="dv" style="color:var(--gold);">約 4.5%</div></div>
+    <div class="di"><div class="dk">RSI(14)</div><div class="dv" style="color:var(--gold);">44 — 整理區偏弱</div></div>
+  </div>
+  <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">📌 存股持有，以年配息收息為核心策略。</div>
+</div></td></tr>
+<!-- 2886 -->
+<tr class="row-hold" data-type="hold" data-tag="fin" data-mkt="tw" onclick="toggleDetail('d-2886')">
+  <td><strong>2886</strong><br><span style="font-size:.65rem;color:var(--muted);">兆豐金</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-fin">金控</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">44.95 元</td>
+  <td style="color:var(--muted);font-size:.72rem;">小幅整理（-0.22%）</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:47%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">47</span></div></td>
+  <td><div class="kd-wrap">K=44 D=46<br><span class="kd-signal sig-n">◆ 中性</span></div></td>
+  <td><span class="act act-hold">持有收息</span></td><td style="color:var(--gold);font-size:.72rem;">低</td>
+</tr>
+<tr class="detail-row" id="d-2886"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">配息頻率</div><div class="dv">年配（8月）</div></div>
+    <div class="di"><div class="dk">近期殖利率</div><div class="dv" style="color:var(--gold);">約 5.5%</div></div>
+    <div class="di"><div class="dk">特性</div><div class="dv">公股銀行，股息穩健</div></div>
+  </div>
+  <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">📌 公股銀行殖利率約 5.5%，以收息為主策略。</div>
+</div></td></tr>
+<!-- 2892 -->
+<tr class="row-hold" data-type="hold" data-tag="fin" data-mkt="tw" onclick="toggleDetail('d-2892')">
+  <td><strong>2892</strong><br><span style="font-size:.65rem;color:var(--muted);">第一金</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-fin">金控</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">35.95 元</td>
+  <td style="color:var(--muted);font-size:.72rem;">小幅整理（-0.28%）</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:45%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">45</span></div></td>
+  <td><div class="kd-wrap">K=42 D=45<br><span class="kd-signal sig-n">◆ 中性偏空</span></div></td>
+  <td><span class="act act-hold">持有收息</span></td><td style="color:var(--gold);font-size:.72rem;">低</td>
+</tr>
+<tr class="detail-row" id="d-2892"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">配息頻率</div><div class="dv">年配（8月）</div></div>
+    <div class="di"><div class="dk">近期殖利率</div><div class="dv" style="color:var(--gold);">約 4.8%</div></div>
+    <div class="di"><div class="dk">特性</div><div class="dv">公股金控，低波動</div></div>
+  </div>
+  <div style="font-size:.68rem;color:var(--muted);margin-top:8px;">📌 殖利率約 4.8%，年配息收息為核心策略，不作短線。</div>
+</div></td></tr>
+<!-- 3529 -->
+<tr class="row-hold" data-type="hold" data-tag="semi" data-mkt="tw" onclick="toggleDetail('d-3529')">
+  <td><strong>3529</strong><br><span style="font-size:.65rem;color:var(--muted);">力旺</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-semi">eNVM IP</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">約 1,480 元</td>
+  <td class="g" style="font-size:.72rem;">AI 晶片嵌入式記憶體受惠</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:58%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">58</span></div></td>
+  <td><div class="kd-wrap">K=56 D=54<br><span class="kd-signal sig-os">✓ 低檔黃金交叉</span></div></td>
+  <td><span class="act act-hold">持有</span></td><td style="color:var(--gold);font-size:.72rem;">中</td>
+</tr>
+<tr class="detail-row" id="d-3529"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">業務</div><div class="dv">嵌入式非揮發記憶體IP</div></div>
+    <div class="di"><div class="dk">AI 受惠</div><div class="dv" style="color:var(--green);">AI 晶片大量採用 eNVM</div></div>
+    <div class="di"><div class="dk">RSI</div><div class="dv" style="color:var(--green);">58 偏多，KD 黃金交叉</div></div>
+  </div>
+  <div style="font-size:.72rem;color:var(--muted);margin-top:6px;">📌 中長線受 AI 基礎設施受惠，持有。</div>
+</div></td></tr>
+<!-- 3546 -->
+<tr class="row-hold" data-type="hold" data-tag="game" data-mkt="tw" onclick="toggleDetail('d-3546')">
+  <td><strong>3546</strong><br><span style="font-size:.65rem;color:var(--muted);">宇峻</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-game">遊戲軟體</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">69.80 元</td>
+  <td style="color:var(--muted);font-size:.72rem;">+0.43%</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:50%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">50</span></div></td>
+  <td><div class="kd-wrap">K=48 D=50<br><span class="kd-signal sig-n">◆ 中性</span></div></td>
+  <td><span class="act act-watch">觀察</span></td><td style="color:var(--gold);font-size:.72rem;">中</td>
+</tr>
+<tr class="detail-row" id="d-3546"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">業務</div><div class="dv">線上遊戲開發</div></div>
+    <div class="di"><div class="dk">RSI</div><div class="dv">50 中性，無強訊號</div></div>
+  </div>
+  <div style="font-size:.72rem;color:var(--muted);margin-top:6px;">📌 非市場資金追逐主軸，觀察為主。</div>
+</div></td></tr>
+<!-- 5274 -->
+<tr class="row-hold" data-type="hold" data-tag="semi" data-mkt="tw" onclick="toggleDetail('d-5274')">
+  <td><strong>5274</strong><br><span style="font-size:.65rem;color:var(--muted);">信驊</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-semi">BMC IC</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">11,750 元</td>
+  <td class="r" style="font-size:.72rem;">▼ -2.49%</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:56%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">56</span></div></td>
+  <td><div class="kd-wrap">K=52 D=55<br><span class="kd-signal sig-n">◆ 中性整理</span></div></td>
+  <td><span class="act act-hold">持有</span></td><td style="color:var(--gold);font-size:.72rem;">中</td>
+</tr>
+<tr class="detail-row" id="d-5274"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">業務</div><div class="dv">伺服器 BMC 晶片</div></div>
+    <div class="di"><div class="dk">AI 受惠</div><div class="dv" style="color:var(--green);">AI 伺服器 BMC 標配</div></div>
+    <div class="di"><div class="dk">RSI</div><div class="dv">56 中性，小跌整理</div></div>
+  </div>
+  <div style="font-size:.72rem;color:var(--muted);margin-top:6px;">📌 AI 伺服器 BMC 晶片龍頭，中長線利多，持有。</div>
+</div></td></tr>
+<!-- 推薦：2337 旺宏 -->
+<tr class="row-new" data-type="new" data-tag="mem" data-mkt="tw" onclick="toggleDetail('d-2337')">
+  <td><strong>2337 🆕</strong><br><span style="font-size:.65rem;color:var(--green);">旺宏電子 ← 推薦新增</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-mem">記憶體</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">157.00 元</td>
+  <td class="g" style="font-size:.72rem;">▲ +9.4%（3/19）⚠處置股</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill rsi-ob" style="width:87%;background:linear-gradient(90deg,var(--gold) 50%,var(--red));"></div></div><span class="rsi-val rsi-ob">87</span></div></td>
+  <td><div class="kd-wrap">K=92 D=88<br><span class="kd-signal sig-ob">⚠ 嚴重超買</span></div></td>
+  <td><span class="act act-caution">謹慎小買</span></td><td style="color:var(--red);font-size:.72rem;">高⚠</td>
+</tr>
+<tr class="detail-row" id="d-2337"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">大摩評級</div><div class="dv" style="color:var(--green);">大中華半導體首選</div></div>
+    <div class="di"><div class="dk">凱基目標價</div><div class="dv" style="color:var(--gold);">300 元</div></div>
+    <div class="di"><div class="dk">處置股</div><div class="dv" style="color:var(--red);">3/19–4/1 ⚠</div></div>
+    <div class="di"><div class="dk">停損位</div><div class="dv" style="color:var(--red);">130.5 元</div></div>
+  </div>
+  <div style="font-size:.68rem;color:var(--red);margin-top:6px;">⚠ RSI 87 + 列處置股，風險極高。僅建議小部位，嚴設停損 130.5 元。</div>
+</div></td></tr>
+<!-- 推薦：2615 萬海 -->
+<tr class="row-new" data-type="new" data-tag="mfg" data-mkt="tw" onclick="toggleDetail('d-2615')">
+  <td><strong>2615 🆕</strong><br><span style="font-size:.65rem;color:var(--green);">萬海航運 ← 推薦新增</span></td>
+  <td><span class="mkt mkt-tw">台股</span></td><td><span class="tag tag-mfg">航運</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">88.00 元</td>
+  <td class="g" style="font-size:.72rem;">外資買超 3.4萬張 #1</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill rsi-os" style="width:42%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-os">42</span></div></td>
+  <td><div class="kd-wrap">K=38 D=35<br><span class="kd-signal sig-os">✓ 低檔黃金交叉</span></div></td>
+  <td><span class="act act-buy">買入</span></td><td style="color:var(--gold);font-size:.72rem;">中</td>
+</tr>
+<tr class="detail-row" id="d-2615"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">外資買超（3/20）</div><div class="dv" style="color:var(--green);">34,462 張 全市場第一</div></div>
+    <div class="di"><div class="dk">停損</div><div class="dv" style="color:var(--red);">80 元</div></div>
+    <div class="di"><div class="dk">目標</div><div class="dv" style="color:var(--green);">105 元（+19.3%）</div></div>
+  </div>
+  <div style="font-size:.68rem;color:var(--muted);margin-top:6px;">📌 低檔 KD 黃金交叉 + 外資買超雙重確認，NT$5,000 可買 56 股零股。</div>
+</div></td></tr>
+<!-- 推薦：MU Micron -->
+<tr class="row-new" data-type="new" data-tag="mem" data-mkt="us" onclick="toggleDetail('d-MU')">
+  <td><strong>MU 🆕</strong><br><span style="font-size:.65rem;color:var(--green);">Micron ← 推薦新增</span></td>
+  <td><span class="mkt mkt-us">美股</span></td><td><span class="tag tag-mem">HBM4記憶體</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">$422.90</td>
+  <td class="r" style="font-size:.72rem;">▼ 財報後 -7% 修正</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:51%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">51</span></div></td>
+  <td><div class="kd-wrap">%K=45 %D=50<br><span class="kd-signal sig-n">◆ 中性整理</span></div></td>
+  <td><span class="act act-add">分批買</span></td><td style="color:var(--orange);font-size:.72rem;">中高</td>
+</tr>
+<tr class="detail-row" id="d-MU"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">Q2 EPS</div><div class="dv" style="color:var(--green);">$12.20（+42%超預期）</div></div>
+    <div class="di"><div class="dk">DB目標</div><div class="dv" style="color:var(--green);">$550</div></div>
+    <div class="di"><div class="dk">停損</div><div class="dv" style="color:var(--red);">$412</div></div>
+  </div>
+  <div style="font-size:.68rem;color:var(--muted);margin-top:6px;">📌 NT$5,000 ≈ USD 155.7，停損 $412，目標 $550（+23.9%）。</div>
+</div></td></tr>
+<!-- 推薦：CAT Caterpillar -->
+<tr class="row-new" data-type="new" data-tag="mfg" data-mkt="us" onclick="toggleDetail('d-CAT')">
+  <td><strong>CAT 🆕</strong><br><span style="font-size:.65rem;color:var(--green);">Caterpillar ← 推薦新增</span></td>
+  <td><span class="mkt mkt-us">美股</span></td><td><span class="tag tag-mfg">重工×AI</span></td>
+  <td style="font-family:'IBM Plex Mono',monospace;">$693.62</td>
+  <td class="g" style="font-size:.72rem;">年初 +30%，道指貢獻#1</td>
+  <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill rsi-os" style="width:30%;background:var(--green);"></div></div><span class="rsi-val rsi-os">30</span></div></td>
+  <td><div class="kd-wrap">%K=22 %D=25<br><span class="kd-signal sig-os">✓ 超賣反彈訊號</span></div></td>
+  <td><span class="act act-buy">買入</span></td><td style="color:var(--gold);font-size:.72rem;">中</td>
+</tr>
+<tr class="detail-row" id="d-CAT"><td colspan="9"><div class="detail-inner">
+  <div class="detail-grid">
+    <div class="di"><div class="dk">RSI</div><div class="dv" style="color:var(--green);">30 超賣邊緣 最強訊號</div></div>
+    <div class="di"><div class="dk">AI合作</div><div class="dv">Nvidia Omniverse</div></div>
+    <div class="di"><div class="dk">停損</div><div class="dv" style="color:var(--red);">$662</div></div>
+    <div class="di"><div class="dk">法說會</div><div class="dv" style="color:var(--gold);">4/29</div></div>
+  </div>
+  <div style="font-size:.68rem;color:var(--muted);margin-top:6px;">📌 五檔推薦中 RSI 最低（30），技術面反彈訊號最強。停損 $662（-2.8%），目標 $736（+8.1%）。</div>
+</div></td></tr>
+</tbody>
+</table>
+
+<div class="disc">
+  <strong>⚠ 免責聲明</strong>：RSI、KD 數值依公開技術分析來源推估，並非即時串流數據。NT$5,000 模擬為教育與追蹤用途，並非投資建議。投資有風險，請自行評估並諮詢持牌金融顧問。
+</div>
+</div><!-- /wrap -->
+
+<!-- FAB + Modal -->
+<button id="fabBtn" onclick="openModal()" title="新增自選股">＋</button>
+<div id="modalOverlay" onclick="closeModal()"></div>
+<div id="stockModal">
+  <div class="modal-header">
+    <span class="modal-title">📋 自選股管理</span>
+    <button class="modal-close" onclick="closeModal()">✕</button>
+  </div>
+  <div class="modal-section">
+    <div class="modal-sec-label">新增股票</div>
+    <div class="add-form">
+      <div class="form-row">
+        <div class="form-group"><label>代碼 <span class="req">*</span></label><input id="f-ticker" placeholder="例：2454 或 NVDA" maxlength="12"></div>
+        <div class="form-group"><label>名稱 <span class="req">*</span></label><input id="f-name" placeholder="例：聯發科"></div>
+        <div class="form-group"><label>市場 <span class="req">*</span></label><select id="f-mkt"><option value="tw">🇹🇼 台股</option><option value="us">🇺🇸 美股</option></select></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>類別</label><select id="f-tag"><option value="semi">半導體</option><option value="mem">記憶體</option><option value="ai">AI零組件</option><option value="mfg">傳產製造</option><option value="fin">金融</option><option value="etf">ETF</option><option value="game">遊戲軟體</option><option value="other">其他</option></select></div>
+        <div class="form-group"><label>買入價 <span class="req">*</span></label><input id="f-entry" type="number" step="0.01" placeholder="例：1840"></div>
+        <div class="form-group"><label>持股數（零股）</label><input id="f-shares" type="number" step="1" placeholder="例：2"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>停損價</label><input id="f-stop" type="number" step="0.01" placeholder="選填"></div>
+        <div class="form-group"><label>目標價</label><input id="f-target" type="number" step="0.01" placeholder="選填"></div>
+        <div class="form-group"><label>備註</label><input id="f-note" placeholder="選填"></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>📅 購入日期 <span class="req">*</span></label><input id="f-buydate" type="date"></div>
+        <div class="form-group"><label>📅 出售日期</label><input id="f-selldate" type="date"></div>
+        <div class="form-group"><label>出售價格</label><input id="f-sellprice" type="number" step="0.01" placeholder="選填"></div>
+      </div>
+      <div id="formError" class="form-error"></div>
+      <button class="btn-add" onclick="addStock()">＋ 加入自選股</button>
+    </div>
+  </div>
+  <div class="modal-section">
+    <div class="modal-sec-label">自選股清單 <span id="watchCount" class="watch-count">0</span></div>
+    <div id="watchList" class="watch-list">
+      <div class="watch-empty" id="watchEmpty">尚未新增任何自選股</div>
+    </div>
+  </div>
+  <div class="modal-footer">
+    <button class="btn-export" onclick="exportCSV()">⬇ 匯出 CSV</button>
+    <button class="btn-clear" onclick="clearAll()">🗑 清除全部</button>
+  </div>
+</div>
 
 <script>
-/* ══════════════════════════════════════════
-   核心功能
-══════════════════════════════════════════ */
+/* ══════════════════════════════════════
+   v3.1 新增：指數動態載入
+   從 ../data.json 讀取（dashboard/ 子目錄往上一層）
+══════════════════════════════════════ */
+async function loadIndices() {
+  const cacheBust = Date.now();
+  let data;
+  try {
+    const res = await fetch(`../data.json?t=${cacheBust}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    data = await res.json();
+  } catch (err) {
+    console.warn('[loadIndices] 無法讀取 data.json:', err);
+    ['TWII','DJI','GSPC'].forEach(k => {
+      const el = document.getElementById(`idx-${k}-time`);
+      if (el) el.textContent = '⚠ 資料讀取失敗';
+      const pe = document.getElementById(`idx-${k}-price`);
+      if (pe) { pe.textContent = '—'; pe.classList.remove('idx-loading'); }
+    });
+    return;
+  }
 
+  const indices = data.indices || {};
+
+  // 更新 header 日期
+  if (data.last_updated_tw) {
+    const hdrDate = document.getElementById('hdr-date');
+    if (hdrDate) {
+      // 格式化為 YYYY / MM / DD
+      const d = data.last_updated_tw.split(' ')[0]; // "2026/04/18"
+      hdrDate.textContent = d.replace(/\//g, ' / ');
+    }
+  }
+
+  for (const [key, info] of Object.entries(indices)) {
+    const priceEl  = document.getElementById(`idx-${key}-price`);
+    const changeEl = document.getElementById(`idx-${key}-change`);
+    const timeEl   = document.getElementById(`idx-${key}-time`);
+    // summary 卡片
+    const sumPriceEl  = document.getElementById(`sum-${key}-price`);
+    const sumChangeEl = document.getElementById(`sum-${key}-change`);
+
+    if (!priceEl) continue;
+    priceEl.classList.remove('idx-loading');
+
+    if (!info || info.price === undefined) {
+      priceEl.textContent  = 'N/A';
+      if (changeEl) changeEl.textContent = '—';
+      if (timeEl)   timeEl.textContent   = '無資料';
+      continue;
+    }
+
+    // 價格
+    const priceStr = Number(info.price).toLocaleString('zh-TW', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+    priceEl.textContent = priceStr;
+    if (sumPriceEl) sumPriceEl.textContent = priceStr;
+
+    // 漲跌
+    const chg    = info.change     ?? 0;
+    const chgPct = info.change_pct ?? 0;
+    const sign   = chg >= 0 ? '▲' : '▼';
+    const cls    = chg > 0 ? 'idx-up' : chg < 0 ? 'idx-down' : 'idx-flat';
+    const chgStr = `${sign} ${Math.abs(chg).toLocaleString('zh-TW',{minimumFractionDigits:2})} (${chg>=0?'+':''}${chgPct.toFixed(2)}%)`;
+    if (changeEl) { changeEl.textContent = chgStr; changeEl.className = `idx-change ${cls}`; }
+    if (sumChangeEl) { sumChangeEl.textContent = chgStr; sumChangeEl.className = `st ${cls}`; }
+
+    // 時間
+    const timeStr = info.updated_at
+      ? `更新：${info.updated_at}`
+      : `更新：${data.last_updated_tw ?? '—'}`;
+    if (timeEl) timeEl.textContent = timeStr;
+  }
+}
+
+/* ══════════════════════════════════════
+   自選股功能
+══════════════════════════════════════ */
 const STORAGE_KEY = 'portfolio_watchlist_v1';
-
-// ── localStorage 讀寫 ──────────────────────
 function loadWatchlist(){ try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'); }catch(e){ return []; } }
 function saveWatchlist(list){ localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); }
 
-// ── Modal 開關 ─────────────────────────────
 function openModal(){
   document.getElementById('modalOverlay').classList.add('show');
   document.getElementById('stockModal').classList.add('show');
@@ -1052,154 +827,98 @@ function closeModal(){
   document.getElementById('stockModal').classList.remove('show');
 }
 
-// ── 表單驗證 + 新增 ────────────────────────
 function addStock(){
   const err = document.getElementById('formError');
   err.textContent = '';
-
-  const ticker    = document.getElementById('f-ticker').value.trim().toUpperCase();
-  const name      = document.getElementById('f-name').value.trim();
-  const mkt       = document.getElementById('f-mkt').value;
-  const tag       = document.getElementById('f-tag').value;
-  const entry     = parseFloat(document.getElementById('f-entry').value);
-  const shares    = parseInt(document.getElementById('f-shares').value) || 0;
-  const stop      = parseFloat(document.getElementById('f-stop').value)    || null;
-  const target    = parseFloat(document.getElementById('f-target').value)  || null;
-  const note      = document.getElementById('f-note').value.trim();
-  const buydate   = document.getElementById('f-buydate').value;     // YYYY-MM-DD
-  const selldate  = document.getElementById('f-selldate').value  || null;
-  const sellprice = parseFloat(document.getElementById('f-sellprice').value) || null;
-
+  const ticker   = document.getElementById('f-ticker').value.trim().toUpperCase();
+  const name     = document.getElementById('f-name').value.trim();
+  const mkt      = document.getElementById('f-mkt').value;
+  const tag      = document.getElementById('f-tag').value;
+  const entry    = parseFloat(document.getElementById('f-entry').value);
+  const shares   = parseInt(document.getElementById('f-shares').value) || 0;
+  const stop     = parseFloat(document.getElementById('f-stop').value)   || null;
+  const target   = parseFloat(document.getElementById('f-target').value) || null;
+  const note     = document.getElementById('f-note').value.trim();
+  const buydate  = document.getElementById('f-buydate').value;
+  const selldate = document.getElementById('f-selldate').value  || null;
+  const sellprice= parseFloat(document.getElementById('f-sellprice').value) || null;
   if(!ticker){ err.textContent='❌ 請輸入股票代碼'; return; }
   if(!name)  { err.textContent='❌ 請輸入股票名稱'; return; }
   if(isNaN(entry)||entry<=0){ err.textContent='❌ 請輸入有效買入價'; return; }
   if(!buydate){ err.textContent='❌ 請選擇購入日期'; return; }
   if(selldate && selldate < buydate){ err.textContent='❌ 出售日期不能早於購入日期'; return; }
   if(selldate && !sellprice){ err.textContent='❌ 已填出售日期，請一併填入出售價格'; return; }
-
   const list = loadWatchlist();
-  if(list.find(s=>s.ticker===ticker)){
-    err.textContent=`❌ ${ticker} 已在自選股中`;
-    return;
-  }
-
-  // 計算已實現損益（若已出售）
-  const realized = (sellprice && shares > 0)
-    ? parseFloat(((sellprice - entry) * shares).toFixed(2))
-    : null;
-  const realizedPct = sellprice
-    ? parseFloat(((sellprice - entry) / entry * 100).toFixed(2))
-    : null;
-
-  const stock = {
-    ticker, name, mkt, tag, entry, shares, stop, target, note,
+  if(list.find(s=>s.ticker===ticker)){ err.textContent=`❌ ${ticker} 已在自選股中`; return; }
+  const realized    = (sellprice && shares > 0) ? parseFloat(((sellprice-entry)*shares).toFixed(2)) : null;
+  const realizedPct = sellprice ? parseFloat(((sellprice-entry)/entry*100).toFixed(2)) : null;
+  list.push({ ticker, name, mkt, tag, entry, shares, stop, target, note,
     buydate, selldate, sellprice, realized, realizedPct,
-    addedAt: new Date().toLocaleDateString('zh-TW'),
-    status: selldate ? 'sold' : 'holding'
-  };
-  list.push(stock);
+    addedAt: new Date().toLocaleDateString('zh-TW'), status: selldate?'sold':'holding' });
   saveWatchlist(list);
-
-  // 清空表單
-  ['f-ticker','f-name','f-entry','f-shares','f-stop','f-target',
-   'f-note','f-buydate','f-selldate','f-sellprice']
+  ['f-ticker','f-name','f-entry','f-shares','f-stop','f-target','f-note','f-buydate','f-selldate','f-sellprice']
     .forEach(id => document.getElementById(id).value='');
-
-  renderWatchList();
-  injectWatchRows();
-  updateBadge();
+  renderWatchList(); injectWatchRows(); updateBadge();
   showToast(`✅ ${name}（${ticker}）已加入自選股`);
 }
 
-// ── 刪除 ───────────────────────────────────
 function deleteStock(ticker){
   const list = loadWatchlist().filter(s => s.ticker !== ticker);
   saveWatchlist(list);
-  // 移除主表格注入列
-  const mainRow = document.getElementById('wr-'+ticker);
-  const detRow  = document.getElementById('wd-'+ticker);
-  if(mainRow) mainRow.remove();
-  if(detRow)  detRow.remove();
-  renderWatchList();
-  updateBadge();
+  ['wr-'+ticker,'wd-'+ticker].forEach(id => { const el=document.getElementById(id); if(el) el.remove(); });
+  renderWatchList(); updateBadge();
   showToast(`🗑 已刪除 ${ticker}`);
 }
 
-// ── 清除全部 ───────────────────────────────
 function clearAll(){
   if(!confirm('確定要清除所有自選股？')) return;
-  const list = loadWatchlist();
-  list.forEach(s=>{
-    const r1=document.getElementById('wr-'+s.ticker);
-    const r2=document.getElementById('wd-'+s.ticker);
-    if(r1) r1.remove(); if(r2) r2.remove();
+  loadWatchlist().forEach(s => {
+    ['wr-'+s.ticker,'wd-'+s.ticker].forEach(id => { const el=document.getElementById(id); if(el) el.remove(); });
   });
-  saveWatchlist([]);
-  renderWatchList();
-  updateBadge();
+  saveWatchlist([]); renderWatchList(); updateBadge();
   showToast('🗑 已清除所有自選股');
 }
 
-// ── 渲染 Modal 清單 ───────────────────────
 function renderWatchList(){
   const list    = loadWatchlist();
   const el      = document.getElementById('watchList');
   const empty   = document.getElementById('watchEmpty');
   const counter = document.getElementById('watchCount');
   counter.textContent = list.length;
-
-  if(list.length===0){
-    empty.style.display='block';
-    el.querySelectorAll('.watch-item').forEach(n=>n.remove());
-    return;
-  }
-  empty.style.display='none';
   el.querySelectorAll('.watch-item').forEach(n=>n.remove());
-
-  list.forEach(s=>{
-    const mktLabel  = s.mkt==='tw'?'🇹🇼':'🇺🇸';
-    const isSold    = s.status==='sold';
-    const buydateFmt  = s.buydate  ? s.buydate.replace(/-/g,'/') : s.addedAt;
-    const selldateFmt = s.selldate ? s.selldate.replace(/-/g,'/') : '—';
-
-    // 損益顯示
+  if(list.length===0){ empty.style.display='block'; return; }
+  empty.style.display='none';
+  list.forEach(s => {
+    const isSold = s.status==='sold';
+    const buydateFmt = s.buydate ? s.buydate.replace(/-/g,'/') : s.addedAt;
+    const selldateFmt= s.selldate? s.selldate.replace(/-/g,'/') : '—';
     let pnlHtml = '';
     if(isSold && s.realizedPct !== null){
       const cls = s.realizedPct >= 0 ? 'g' : 'r';
-      const arrow = s.realizedPct >= 0 ? '▲' : '▼';
-      pnlHtml = `<span class="${cls}" style="font-size:.68rem;font-family:'IBM Plex Mono',monospace;">${arrow} ${s.realizedPct}%</span>`;
+      pnlHtml = `<span class="${cls}" style="font-size:.68rem;font-family:'IBM Plex Mono',monospace;">${s.realizedPct>=0?'▲':'▼'} ${s.realizedPct}%</span>`;
     }
-
-    // 狀態徽章
     const statusBadge = isSold
       ? `<span style="display:inline-block;padding:1px 7px;border-radius:5px;font-size:.58rem;background:rgba(240,48,96,.1);color:var(--red);border:1px solid rgba(240,48,96,.25);">已出售</span>`
       : `<span style="display:inline-block;padding:1px 7px;border-radius:5px;font-size:.58rem;background:rgba(40,224,144,.1);color:var(--green);border:1px solid rgba(40,224,144,.25);">持有中</span>`;
-
     const item = document.createElement('div');
-    item.className='watch-item';
-    item.id='witem-'+s.ticker;
+    item.className='watch-item'; item.id='witem-'+s.ticker;
     item.innerHTML=`
       <div style="min-width:0;">
-        <div class="wi-name">${mktLabel} ${s.name} ${statusBadge}</div>
+        <div class="wi-name">${s.mkt==='tw'?'🇹🇼':'🇺🇸'} ${s.name} ${statusBadge}</div>
         <div class="wi-ticker">${s.ticker} · 買 ${s.entry}${s.sellprice?' → 賣 '+s.sellprice:''}</div>
-        <div style="font-size:.62rem;color:var(--muted);margin-top:2px;">
-          📅 購入 ${buydateFmt}${isSold?' &nbsp;→&nbsp; 出售 '+selldateFmt:''}
-        </div>
+        <div style="font-size:.62rem;color:var(--muted);margin-top:2px;">📅 ${buydateFmt}${isSold?' → '+selldateFmt:''}</div>
       </div>
       <span class="tag tag-${s.tag}" style="font-size:.58rem;flex-shrink:0;">${tagLabel(s.tag)}</span>
       <span class="wi-stop" style="flex-shrink:0;">${s.stop?'停損 '+s.stop:''}</span>
       <div style="text-align:right;flex-shrink:0;">${pnlHtml}</div>
-      <button class="wi-del" onclick="deleteStock('${s.ticker}')">刪除</button>
-    `;
+      <button class="wi-del" onclick="deleteStock('${s.ticker}')">刪除</button>`;
     el.appendChild(item);
   });
 }
 
-// ── 注入主表格 ─────────────────────────────
 function injectWatchRows(){
-  const list = loadWatchlist();
+  const list  = loadWatchlist();
   const tbody = document.getElementById('tableBody');
-
   if(!document.getElementById('watch-section-head')){
     const sepRow = document.createElement('tr');
     sepRow.id='watch-section-head';
@@ -1207,50 +926,29 @@ function injectWatchRows(){
       <div style="display:flex;align-items:center;gap:8px;">
         <span style="font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;font-family:'IBM Plex Mono',monospace;color:var(--muted);white-space:nowrap;">⭐ 自選股</span>
         <div style="flex:1;height:1px;background:var(--border);"></div>
-      </div>
-    </td>`;
+      </div></td>`;
     tbody.appendChild(sepRow);
   }
-
-  list.forEach(s=>{
+  list.forEach(s => {
     if(document.getElementById('wr-'+s.ticker)) return;
-
-    const isUS      = s.mkt==='us';
-    const isSold    = s.status==='sold';
+    const isUS   = s.mkt==='us';
+    const isSold = s.status==='sold';
     const priceDisp = isUS ? `$${s.entry}` : `${s.entry} 元`;
-    const buydateFmt  = s.buydate  ? s.buydate.replace(/-/g,'/') : s.addedAt;
-    const selldateFmt = s.selldate ? s.selldate.replace(/-/g,'/') : null;
-
-    // 主表格「近三日」欄：顯示持有/出售狀態
-    let statusCell = '';
-    if(isSold && s.realizedPct !== null){
-      const cls   = s.realizedPct >= 0 ? 'g' : 'r';
-      const arrow = s.realizedPct >= 0 ? '▲' : '▼';
-      statusCell  = `<span class="${cls}" style="font-size:.72rem;">已出售 ${arrow}${Math.abs(s.realizedPct)}%</span>`;
-    } else {
-      statusCell = `<span style="color:var(--green);font-size:.72rem;">持有中 · 買 ${buydateFmt}</span>`;
-    }
-
-    // 持倉天數
-    const buyMs   = new Date(s.buydate||s.addedAt).getTime();
-    const endMs   = isSold ? new Date(s.selldate).getTime() : Date.now();
-    const days    = Math.max(0, Math.floor((endMs - buyMs) / 86400000));
-
-    // 主列
+    const buydateFmt = s.buydate ? s.buydate.replace(/-/g,'/') : s.addedAt;
+    const selldateFmt= s.selldate? s.selldate.replace(/-/g,'/') : null;
+    const buyMs = new Date(s.buydate||s.addedAt).getTime();
+    const endMs = isSold ? new Date(s.selldate).getTime() : Date.now();
+    const days  = Math.max(0, Math.floor((endMs-buyMs)/86400000));
+    let statusCell = isSold && s.realizedPct !== null
+      ? `<span class="${s.realizedPct>=0?'g':'r'}" style="font-size:.72rem;">已出售 ${s.realizedPct>=0?'▲':'▼'}${Math.abs(s.realizedPct)}%</span>`
+      : `<span style="color:var(--green);font-size:.72rem;">持有中 · 買 ${buydateFmt}</span>`;
     const tr = document.createElement('tr');
-    tr.className = isSold ? 'row-watch' : 'row-watch';
-    tr.style.opacity = isSold ? '.75' : '1';
-    tr.dataset.type='watch';
-    tr.dataset.tag=s.tag;
-    tr.dataset.mkt=s.mkt;
+    tr.className='row-watch'; tr.style.opacity=isSold?'.75':'1';
+    tr.dataset.type='watch'; tr.dataset.tag=s.tag; tr.dataset.mkt=s.mkt;
     tr.id='wr-'+s.ticker;
     tr.setAttribute('onclick',`toggleDetail('wd-${s.ticker}')`);
     tr.innerHTML=`
-      <td>
-        <strong>${s.ticker} ⭐</strong>
-        ${isSold?'<span style="font-size:.55rem;padding:1px 5px;border-radius:3px;background:rgba(240,48,96,.1);color:var(--red);border:1px solid rgba(240,48,96,.2);margin-left:4px;">已售</span>':''}
-        <br><span style="font-size:.65rem;color:var(--purple);">${s.name}</span>
-      </td>
+      <td><strong>${s.ticker} ⭐</strong>${isSold?'<span style="font-size:.55rem;padding:1px 5px;border-radius:3px;background:rgba(240,48,96,.1);color:var(--red);border:1px solid rgba(240,48,96,.2);margin-left:4px;">已售</span>':''}<br><span style="font-size:.65rem;color:var(--purple);">${s.name}</span></td>
       <td><span class="mkt mkt-${s.mkt}">${isUS?'美股':'台股'}</span></td>
       <td><span class="tag tag-${s.tag}">${tagLabel(s.tag)}</span></td>
       <td style="font-family:'IBM Plex Mono',monospace;">${priceDisp}${s.sellprice?`<br><span style="font-size:.62rem;color:var(--red);">→ ${isUS?'$':''}${s.sellprice}</span>`:''}</td>
@@ -1258,20 +956,13 @@ function injectWatchRows(){
       <td><div class="rsi-wrap"><div class="rsi-bar"><div class="rsi-fill" style="width:50%;background:linear-gradient(90deg,var(--green),var(--gold));"></div></div><span class="rsi-val rsi-n">—</span></div></td>
       <td><div class="kd-wrap" style="font-size:.7rem;color:var(--muted);">— / —<br><span class="kd-signal sig-n">待更新</span></div></td>
       <td><span class="act act-watch">自選</span></td>
-      <td style="color:var(--muted);font-size:.72rem;">${isSold?'—':'—'}</td>
-    `;
+      <td style="color:var(--muted);font-size:.72rem;">—</td>`;
     tbody.appendChild(tr);
-
-    // 展開 detail 列
-    const pnlNote    = s.stop      ? `${s.stop}` : '未設定';
-    const tgtNote    = s.target    ? `${s.target}` : '未設定';
-    const realNote   = (s.realized !== null && s.realized !== undefined)
-      ? `<span class="${s.realized>=0?'g':'r'}" style="font-weight:700;">${s.realized>=0?'+':''}${s.realized} 元 (${s.realizedPct>=0?'+':''}${s.realizedPct}%)</span>`
+    const realNote = (s.realized !== null && s.realized !== undefined)
+      ? `<span class="${s.realized>=0?'g':'r'}" style="font-weight:700;">${s.realized>=0?'+':''}${s.realized} (${s.realizedPct>=0?'+':''}${s.realizedPct}%)</span>`
       : '持有中';
-
     const td = document.createElement('tr');
-    td.className='detail-row';
-    td.id='wd-'+s.ticker;
+    td.className='detail-row'; td.id='wd-'+s.ticker;
     td.innerHTML=`<td colspan="9"><div class="detail-inner">
       <div class="detail-grid">
         <div class="di"><div class="dk">代碼</div><div class="dv">${s.ticker}</div></div>
@@ -1279,35 +970,11 @@ function injectWatchRows(){
         <div class="di"><div class="dk">持股數</div><div class="dv">${s.shares||'—'} 股</div></div>
         <div class="di"><div class="dk">📅 購入日期</div><div class="dv" style="color:var(--gold);">${buydateFmt}</div></div>
         <div class="di"><div class="dk">📅 出售日期</div><div class="dv" style="color:${isSold?'var(--red)':'var(--muted)'};">${selldateFmt||'尚未出售'}</div></div>
-        <div class="di"><div class="dk">出售價格</div><div class="dv" style="color:var(--red);">${s.sellprice||(isUS?'$':'')+'—'}</div></div>
         <div class="di"><div class="dk">已實現損益</div><div class="dv">${realNote}</div></div>
-        <div class="di"><div class="dk">持有天數</div><div class="dv" style="color:var(--cyan);">${days} 天${isSold?' (已結束)':''}</div></div>
-        <div class="di"><div class="dk">停損</div><div class="dv" style="color:var(--red);">${pnlNote}</div></div>
-        <div class="di"><div class="dk">目標</div><div class="dv" style="color:var(--green);">${tgtNote}</div></div>
+        <div class="di"><div class="dk">持有天數</div><div class="dv" style="color:var(--cyan);">${days} 天</div></div>
+        <div class="di"><div class="dk">停損</div><div class="dv" style="color:var(--red);">${s.stop||'未設定'}</div></div>
+        <div class="di"><div class="dk">目標</div><div class="dv" style="color:var(--green);">${s.target||'未設定'}</div></div>
         <div class="di"><div class="dk">備註</div><div class="dv">${s.note||'—'}</div></div>
-      </div>
-      <div style="margin-top:10px;">
-        <div class="sim-log">
-          <div class="sim-log-hd"><span>事件</span><span>日期</span><span>價格</span><span>損益</span><span>報酬率</span></div>
-          <div class="sim-row">
-            <span style="color:var(--green);font-size:.65rem;">📥 購入</span>
-            <span class="dt">${buydateFmt}</span>
-            <span>${priceDisp}</span>
-            <span class="y">—</span>
-            <span class="y">基準</span>
-          </div>
-          ${isSold ? `<div class="sim-row">
-            <span style="color:var(--red);font-size:.65rem;">📤 出售</span>
-            <span class="dt">${selldateFmt}</span>
-            <span>${isUS?'$':''}${s.sellprice}</span>
-            <span class="${s.realized>=0?'g':'r'}">${s.realized>=0?'+':''}${s.realized||'—'}</span>
-            <span class="${s.realizedPct>=0?'g':'r'}">${s.realizedPct>=0?'+':''}${s.realizedPct||'—'}%</span>
-          </div>` : `<div class="sim-row" style="opacity:.5;">
-            <span style="color:var(--muted);font-size:.65rem;">📊 追蹤</span>
-            <span class="dt">持有中</span>
-            <span>—</span><span>—</span><span>—</span>
-          </div>`}
-        </div>
       </div>
       <div style="margin-top:10px;display:flex;justify-content:flex-end;">
         <button class="wi-del" onclick="deleteStock('${s.ticker}');closeModal();" style="padding:4px 14px;font-size:.7rem;">🗑 從自選股移除</button>
@@ -1317,132 +984,104 @@ function injectWatchRows(){
   });
 }
 
-// ── 匯出 CSV ───────────────────────────────
 function exportCSV(){
   const list = loadWatchlist();
   if(list.length===0){ showToast('⚠ 尚無自選股可匯出'); return; }
   const header = '代碼,名稱,市場,類別,買入價,持股數,購入日期,出售日期,出售價格,已實現損益,報酬率(%),持有天數,停損,目標,備註,狀態\n';
-  const rows = list.map(s=>{
-    const buyMs  = new Date(s.buydate||s.addedAt).getTime();
-    const endMs  = s.selldate ? new Date(s.selldate).getTime() : Date.now();
-    const days   = Math.max(0, Math.floor((endMs - buyMs) / 86400000));
-    return [
-      s.ticker, s.name,
-      s.mkt==='tw'?'台股':'美股',
-      tagLabel(s.tag),
-      s.entry, s.shares||'',
-      s.buydate||s.addedAt,
-      s.selldate||'',
-      s.sellprice||'',
-      s.realized!==null&&s.realized!==undefined ? s.realized : '',
-      s.realizedPct!==null&&s.realizedPct!==undefined ? s.realizedPct : '',
-      days,
-      s.stop||'', s.target||'', s.note||'',
-      s.status==='sold'?'已出售':'持有中'
-    ].join(',');
+  const rows = list.map(s => {
+    const buyMs = new Date(s.buydate||s.addedAt).getTime();
+    const endMs = s.selldate ? new Date(s.selldate).getTime() : Date.now();
+    const days  = Math.max(0, Math.floor((endMs-buyMs)/86400000));
+    return [s.ticker,s.name,s.mkt==='tw'?'台股':'美股',tagLabel(s.tag),s.entry,s.shares||'',
+      s.buydate||s.addedAt,s.selldate||'',s.sellprice||'',
+      s.realized??'',s.realizedPct??'',days,s.stop||'',s.target||'',s.note||'',
+      s.status==='sold'?'已出售':'持有中'].join(',');
   }).join('\n');
   const blob = new Blob(['\uFEFF'+header+rows],{type:'text/csv;charset=utf-8;'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href=url; a.download='Portfolio_watchlist.csv'; a.click();
   URL.revokeObjectURL(url);
-  showToast('⬇ 已匯出 CSV（含購入/出售記錄）');
+  showToast('⬇ 已匯出 CSV');
 }
 
-// ── 更新標題徽章 ───────────────────────────
 function updateBadge(){
   const list = loadWatchlist();
   const holdBdg = document.querySelector('.bdg-hold');
-  if(holdBdg) holdBdg.textContent = `📁 持倉 ${11 + list.length} 檔`;
+  if(holdBdg) holdBdg.textContent = `📁 持倉 ${11+list.length} 檔`;
 }
 
-// ── Tag 標籤文字對照 ───────────────────────
 function tagLabel(tag){
-  const m={'semi':'半導體','mem':'記憶體','ai':'AI零組件',
-           'mfg':'傳產製造','fin':'金融','etf':'ETF',
-           'game':'遊戲軟體','other':'其他'};
-  return m[tag]||tag;
+  return {'semi':'半導體','mem':'記憶體','ai':'AI零組件','mfg':'傳產製造',
+          'fin':'金融','etf':'ETF','game':'遊戲軟體','other':'其他'}[tag]||tag;
 }
 
-// ── Toast 提示 ─────────────────────────────
 function showToast(msg){
   let t=document.getElementById('toastBox');
-  if(!t){
-    t=document.createElement('div');
-    t.id='toastBox';
+  if(!t){ t=document.createElement('div'); t.id='toastBox';
     t.style.cssText='position:fixed;bottom:90px;right:24px;z-index:999;display:flex;flex-direction:column;gap:6px;';
-    document.body.appendChild(t);
-  }
-  const d=document.createElement('div');
-  d.textContent=msg;
+    document.body.appendChild(t); }
+  const d=document.createElement('div'); d.textContent=msg;
   d.style.cssText='background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:8px 14px;font-size:.76rem;color:var(--text);box-shadow:0 4px 16px rgba(0,0,0,.4);animation:up .25s ease;';
-  t.appendChild(d);
-  setTimeout(()=>d.remove(),2800);
+  t.appendChild(d); setTimeout(()=>d.remove(),2800);
 }
 
-// ── filterRows（原有，擴充支援 watch）──────
 function filterRows(key, btn){
   document.querySelectorAll('.fb').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
-  const rows = document.querySelectorAll('#tableBody tr[data-type]');
-  rows.forEach(r => {
-    const show = key === 'all'
-      || (key === 'hold'  && r.dataset.type === 'hold')
-      || (key === 'new'   && r.dataset.type === 'new')
-      || (key === 'watch' && r.dataset.type === 'watch')
-      || (key === 'tw'    && r.dataset.mkt  === 'tw')
-      || (key === 'us'    && r.dataset.mkt  === 'us')
-      || r.dataset.tag === key;
+  document.querySelectorAll('#tableBody tr[data-type]').forEach(r => {
+    const show = key==='all'
+      ||(key==='hold'  && r.dataset.type==='hold')
+      ||(key==='new'   && r.dataset.type==='new')
+      ||(key==='watch' && r.dataset.type==='watch')
+      ||(key==='tw'    && r.dataset.mkt==='tw')
+      ||(key==='us'    && r.dataset.mkt==='us')
+      || r.dataset.tag===key;
     r.style.display = show ? '' : 'none';
     const did = r.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
-    if(did){
-      const det = document.getElementById(did);
-      if(det){ det.style.display = show ? '' : 'none'; if(!show) det.classList.remove('open'); }
-    }
+    if(did){ const det=document.getElementById(did); if(det){ det.style.display=show?'':'none'; if(!show) det.classList.remove('open'); } }
   });
-  // 自選股分隔列顯示邏輯
-  const sep = document.getElementById('watch-section-head');
-  if(sep) sep.style.display = (key==='hold'||key==='new') ? 'none' : '';
+  const sep=document.getElementById('watch-section-head');
+  if(sep) sep.style.display=(key==='hold'||key==='new')?'none':'';
 }
 
-// ── toggleDetail（原有）───────────────────
 function toggleDetail(id){
-  const row = document.getElementById(id);
+  const row=document.getElementById(id);
   if(row) row.classList.toggle('open');
 }
 
-// ── 頁面載入時恢復自選股 ──────────────────
-window.addEventListener('DOMContentLoaded', ()=>{
-  injectWatchRows();
-  updateBadge();
-  // 篩選按鈕加入「自選股」選項
-  const frow = document.querySelector('.frow');
+function setTheme(name, btn){
+  document.documentElement.dataset.theme=(name==='dark')?'':name;
+  document.querySelectorAll('.tbtn').forEach(b=>b.classList.remove('ton'));
+  btn.classList.add('ton');
+  localStorage.setItem('portfolio_theme',name);
+}
+
+/* ── 頁面載入 ── */
+window.addEventListener('DOMContentLoaded', () => {
+  // 主題還原
+  const saved = localStorage.getItem('portfolio_theme');
+  if(saved && saved!=='dark'){
+    document.documentElement.dataset.theme=saved;
+    const btn=document.getElementById('t-'+saved);
+    if(btn){ document.querySelectorAll('.tbtn').forEach(b=>b.classList.remove('ton')); btn.classList.add('ton'); }
+  }
+  // 自選股還原
+  injectWatchRows(); updateBadge();
+  // 篩選按鈕加入「自選股」
+  const frow=document.querySelector('.frow');
   if(frow && !document.getElementById('fb-watch')){
-    const btn = document.createElement('button');
-    btn.className='fb';
-    btn.id='fb-watch';
-    btn.textContent='⭐ 自選股';
+    const btn=document.createElement('button');
+    btn.className='fb'; btn.id='fb-watch'; btn.textContent='⭐ 自選股';
     btn.setAttribute('onclick',"filterRows('watch',this)");
     frow.appendChild(btn);
   }
+  // ← v3.1：載入指數（最後執行）
+  loadIndices();
 });
 
-// ── 主題切換 ──
-function setTheme(name, btn){
-  document.documentElement.dataset.theme = (name==='dark') ? '' : name;
-  document.querySelectorAll('.tbtn').forEach(b=>b.classList.remove('ton'));
-  btn.classList.add('ton');
-  localStorage.setItem('portfolio_theme', name);
-}
-(function(){
-  const saved = localStorage.getItem('portfolio_theme');
-  if(saved && saved!=='dark'){
-    document.documentElement.dataset.theme = saved;
-    const btn = document.getElementById('t-'+saved);
-    if(btn){ document.querySelectorAll('.tbtn').forEach(b=>b.classList.remove('ton')); btn.classList.add('ton'); }
-  }
-})();
-
+// 每 5 分鐘自動刷新指數
+setInterval(loadIndices, 5 * 60 * 1000);
 </script>
 </body>
 </html>
